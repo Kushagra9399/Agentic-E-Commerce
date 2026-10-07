@@ -1,0 +1,17 @@
+venv/
+
+.env
+
+__pycache__
+
+.vscode
+
+node_modules/
+
+.env.*
+
+dist/
+
+build/
+
+data/

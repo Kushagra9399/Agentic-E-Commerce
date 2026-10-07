@@ -1,0 +1,6 @@
+{
+  "name": "AI Commerce Agent",
+  "description": "Autonomous AI shopping assistant frontend with bounded buyer approvals, cart management, Razorpay payment flow, upsell/cross-sell, and audit trail.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
