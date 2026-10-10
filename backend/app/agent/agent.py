@@ -93,22 +93,43 @@ def compact_product(product):
 
     This is intentionally much smaller than returning the
     complete database object. Optimized for token limits.
+    Handles both database format and SerpAPI format.
     """
 
     if not isinstance(product, dict):
         return product
 
+    # Handle SerpAPI format (asin, title, price) and database format (id, name, sale_price)
+    product_id = (
+        product.get("asin")  # SerpAPI format
+        or product.get("id")
+        or product.get("product_id")
+        or ""
+    )
+    
+    title = (
+        product.get("title")  # SerpAPI format
+        or product.get("name")  # Database format
+        or ""
+    )
+    
+    price = (
+        product.get("price")  # SerpAPI format
+        or product.get("sale_price")  # Database format
+        or product.get("market_price")  # Database fallback
+        or None
+    )
+    
+    discount = product.get("discount_percent")
+    rating = product.get("rating")
+    
     return {
-        "id": str(
-            product.get("id")
-            or product.get("product_id")
-            or ""
-        ),
-        "name": product.get("name"),
-        "brand": product.get("brand"),
-        "price": product.get("sale_price")
-        or product.get("market_price"),
-        "discount": product.get("discount_percent"),
+        "id": str(product_id),
+        "name": title,
+        "brand": product.get("brand", "Unknown"),
+        "price": price,
+        "discount": discount,
+        "rating": rating,
     }
 
 
@@ -116,6 +137,7 @@ def compact_product_details(product):
     """
     Return more information when the user explicitly asks
     about a particular product. Keep specs concise for tokens.
+    Handles both database and SerpAPI formats.
     """
 
     if not isinstance(product, dict):
@@ -123,13 +145,21 @@ def compact_product_details(product):
 
     result = compact_product(product)
 
-    spec = product.get("specification")
-    if spec and isinstance(spec, str) and len(spec) > 200:
-        spec = spec[:200] + "..."
+    # Handle both formats: database "specification" (string) and SerpAPI "specifications" (dict)
+    spec = product.get("specifications") or product.get("specification")
+    
+    if spec:
+        if isinstance(spec, dict):
+            # Convert dict to readable string
+            spec = ", ".join([f"{k}: {v}" for k, v in spec.items()])
+        if isinstance(spec, str) and len(spec) > 200:
+            spec = spec[:200] + "..."
 
     result.update({
         "specifications": spec,
         "stock": product.get("stock"),
+        "link": product.get("link"),
+        "in_stock": product.get("in_stock"),
     })
 
     return result

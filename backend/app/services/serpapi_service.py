@@ -100,8 +100,8 @@ class SerpAPIService:
             response.raise_for_status()
             data = response.json()
 
-            print("Data: ")
-            print(data)
+            # print("Data: ")
+            # print(data)
 
             # SerpAPI may return an API-level error in a JSON response.
             if data.get("error"):
@@ -146,8 +146,9 @@ class SerpAPIService:
                         continue
                 else:
                     try:
-                        price = float(price)
+                        price = int(price)
                     except (ValueError, TypeError):
+                        print("Error while conversion")
                         continue
 
                     if min_price is not None and price < min_price:
@@ -383,7 +384,7 @@ class SerpAPIService:
             try:
                 price = self._parse_price(result.get("price", "0"))
                 original_price = self._parse_price(
-                    result.get("price_strikethrough", result.get("price", "0"))
+                    result.get("price_strikethrough", result.get("old_price", "0"))
                 )
                 discount_percent = 0
                 if original_price > 0:
@@ -412,81 +413,145 @@ class SerpAPIService:
         return formatted
     
     def _format_product_details(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Format detailed product information."""
-        product = data.get("product", {})
-        buybox = data.get("buybox_winner", {})
+        """Format detailed product information from SerpAPI response."""
+        # SerpAPI amazon_product engine returns data in 'product_results'
+        product = data.get("product_results", {})
         
-        price = self._parse_price(buybox.get("price", "0"))
+        # Extract price from purchase_options or product_results
+        price = 0
+        original_price = 0
+        
+        # Try to get price from purchase_options (Amazon's standard format)
+        purchase_options = data.get("purchase_options", {})
+        if purchase_options.get("Amazon"):
+            amazon_option = purchase_options["Amazon"]
+            if isinstance(amazon_option, dict):
+                price = self._parse_price(amazon_option.get("price", "0"))
+        
+        # Fallback to extracted_price from product_results
+        if price == 0:
+            price = self._parse_price(product.get("extracted_price", "0"))
+        
+        # Get original price
         original_price = self._parse_price(
-            buybox.get("price_strikethrough", buybox.get("price", "0"))
+            product.get("extracted_old_price", "0")
         )
-        discount_percent = 0
-        if original_price > 0:
-            discount_percent = round((1 - price / original_price) * 100)
         
-        # Format specifications concisely
+        # Calculate discount
+        discount_percent = 0
+        if original_price > 0 and price > 0:
+            discount_percent = round((1 - price / original_price) * 100)
+        elif product.get("discount"):
+            # Try to parse discount percentage if available
+            try:
+                discount_percent = int(product.get("discount", "0").replace("%", ""))
+            except (ValueError, TypeError):
+                discount_percent = 0
+        
+        # Format specifications from item_specifications
         specs = {}
-        for spec in data.get("specifications", []):
-            if isinstance(spec, dict):
-                specs.update(spec)
+        for spec_group in data.get("item_specifications", []):
+            if isinstance(spec_group, dict):
+                for spec_item in spec_group.get("specifications", []):
+                    if isinstance(spec_item, dict):
+                        name = spec_item.get("name", "")
+                        value = spec_item.get("value", "")
+                        if name and value:
+                            specs[name] = value
+        
+        # Get images
+        images = []
+        if product.get("thumbnails"):
+            thumbnails = product["thumbnails"]
+            for img in thumbnails[:3]:
+                if isinstance(img, dict):
+                    img_url = img.get("src", "")
+                elif isinstance(img, str):
+                    img_url = img
+                else:
+                    continue
+                if img_url:
+                    images.append(img_url)
+        elif product.get("thumbnail"):
+            images = [product.get("thumbnail")]
         
         return {
-            "asin": data.get("asin", ""),
+            "asin": product.get("asin", ""),
             "title": product.get("title", ""),
             "brand": product.get("brand", "Unknown"),
             "price": price,
             "original_price": original_price,
             "discount_percent": discount_percent,
-            "rating": data.get("rating", 0),
-            "review_count": data.get("review_count", 0),
-            "description": product.get("description", ""),
-            "image": product.get("main_image", ""),
-            "images": data.get("images", [])[:3],  # Limit to 3 images
+            "rating": product.get("rating", 0),
+            "review_count": product.get("reviews", 0),
+            "description": self._extract_description(data),
+            "image": product.get("thumbnail", ""),
+            "images": images,
             "specifications": specs,
-            "link": data.get("link", ""),
-            "availability": buybox.get("availability", {}).get("raw", ""),
-            "merchant": buybox.get("merchant", "Unknown"),
+            "link": product.get("link_clean") or product.get("link", ""),
+            "availability": product.get("stock", {}).get("status", "") if isinstance(product.get("stock"), dict) else product.get("stock", ""),
+            "merchant": "Amazon",  # Default to Amazon for amazon_product endpoint
         }
+    
+    def _extract_description(self, data: Dict[str, Any]) -> str:
+        """Extract product description from SerpAPI response."""
+        product_desc = data.get("product_description", {})
+        
+        # product_description can be a dict with "text" or a list
+        if isinstance(product_desc, dict):
+            return product_desc.get("text", "")
+        elif isinstance(product_desc, list) and product_desc:
+            # If it's a list, get the first item's text
+            if isinstance(product_desc[0], dict):
+                return product_desc[0].get("text", "")
+            return ""
+        
+        return ""
     
     def _extract_addons(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Extract add-on products from product details.
-        SerpAPI may provide sponsored or bundled products.
+        SerpAPI provides 'bought_together' for frequently bought together.
         """
         addons = []
         
-        # Check for frequently bought together
-        if "frequently_bought_together" in data:
-            for item in data.get("frequently_bought_together", [])[:3]:
-                addon = {
-                    "asin": item.get("asin", ""),
-                    "title": item.get("title", ""),
-                    "price": self._parse_price(item.get("price", "0")),
-                    "image": item.get("image", ""),
-                }
-                if addon["asin"]:
-                    addons.append(addon)
+        # Check for bought_together products
+        bought_together = data.get("bought_together", [])
+        if bought_together:
+            for item in bought_together[:3]:
+                if isinstance(item, dict):
+                    addon = {
+                        "asin": item.get("asin", ""),
+                        "title": item.get("title", ""),
+                        "price": self._parse_price(item.get("price", "0")),
+                        "image": item.get("thumbnail", ""),
+                    }
+                    if addon["asin"]:
+                        addons.append(addon)
         
         return addons
     
     def _extract_recommendations(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Extract recommended/similar products from product details.
+        SerpAPI provides 'related_products' for customer who viewed this also viewed.
         """
         recommendations = []
         
-        # Check for customers who viewed this also viewed
-        if "customers_who_viewed" in data:
-            for item in data.get("customers_who_viewed", [])[:3]:
-                rec = {
-                    "asin": item.get("asin", ""),
-                    "title": item.get("title", ""),
-                    "price": self._parse_price(item.get("price", "0")),
-                    "image": item.get("image", ""),
-                    "rating": item.get("rating", 0),
-                }
-                if rec["asin"]:
-                    recommendations.append(rec)
+        # Check for related_products
+        related_products = data.get("related_products", [])
+        if related_products:
+            for item in related_products[:3]:
+                if isinstance(item, dict):
+                    rec = {
+                        "asin": item.get("asin", ""),
+                        "title": item.get("title", ""),
+                        "price": self._parse_price(item.get("price", "0")),
+                        "image": item.get("thumbnail", ""),
+                        "rating": item.get("rating", 0),
+                    }
+                    if rec["asin"]:
+                        recommendations.append(rec)
         
         return recommendations
     
