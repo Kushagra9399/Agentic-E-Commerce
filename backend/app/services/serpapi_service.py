@@ -22,7 +22,7 @@ class SerpAPIService:
         self.api_key = settings.SERPAPI_KEY
         if not self.api_key:
             raise ValueError("SERPAPI_KEY not configured in .env")
-    
+
     def search_products(
         self,
         query: str,
@@ -30,98 +30,213 @@ class SerpAPIService:
         min_price: Optional[float] = None,
         brand: Optional[str] = None,
         limit: int = 5,
-        amazon_domain: str = DEFAULT_AMAZON_DOMAIN
+        amazon_domain: str = DEFAULT_AMAZON_DOMAIN,
     ) -> Dict[str, Any]:
-        """
-        Search for products on Amazon using SerpAPI.
-        
-        Checks cache first, then makes API call if needed.
-        
-        Args:
-            query: Search query
-            max_price: Maximum price filter
-            min_price: Minimum price filter
-            brand: Brand filter
-            limit: Number of results to return
-            amazon_domain: Amazon domain (amazon.in, amazon.com, etc.)
-        
-        Returns:
-            Dict with search results, recommendations, and metadata
-        """
-        # Check cache first
+
         cache_key_params = {
-            "q": query,
+            "k": query,
             "max_price": max_price,
             "min_price": min_price,
             "brand": brand,
             "limit": limit,
-            "amazon_domain": amazon_domain
+            "amazon_domain": amazon_domain,
         }
-        
+
+        # Validate input before making the request.
+        if not self.api_key or not self.api_key.strip():
+            return {
+                "query": query,
+                "count": 0,
+                "products": [],
+                "error": "SerpAPI API key is missing.",
+                "from_cache": False,
+                "has_more": False,
+            }
+
+        if limit < 1:
+            return {
+                "query": query,
+                "count": 0,
+                "products": [],
+                "error": "limit must be at least 1.",
+                "from_cache": False,
+                "has_more": False,
+            }
+
+        if (
+            min_price is not None
+            and max_price is not None
+            and min_price > max_price
+        ):
+            return {
+                "query": query,
+                "count": 0,
+                "products": [],
+                "error": "min_price cannot exceed max_price.",
+                "from_cache": False,
+                "has_more": False,
+            }
+
+        # Temporarily disable this block if you suspect stale cached results.
         cached = SerpAPICache.get("amazon", **cache_key_params)
         if cached:
             cached["from_cache"] = True
             return cached
-        
+
         params = {
             "engine": "amazon",
-            "q": query,
+            "k": query,
             "api_key": self.api_key,
             "amazon_domain": amazon_domain,
         }
-        
-        if brand:
-            params["brands"] = brand
-        if min_price:
-            params["min_price"] = int(min_price * 100)
-        if max_price:
-            params["max_price"] = int(max_price * 100)
-        
+
         try:
-            response = requests.get(self.BASE_URL, params=params, timeout=10)
+            response = requests.get(
+                self.BASE_URL,
+                params=params,
+                timeout=20,
+            )
+
             response.raise_for_status()
             data = response.json()
-            
+
+            print("Data: ")
+            print(data)
+
+            # SerpAPI may return an API-level error in a JSON response.
+            if data.get("error"):
+                return {
+                    "query": query,
+                    "count": 0,
+                    "products": [],
+                    "error": f"SerpAPI error: {data['error']}",
+                    "from_cache": False,
+                    "has_more": False,
+                }
+
+            # The standard Amazon engine uses organic_results.
+            raw_products = data.get("organic_results") or []
+
+            # Keep compatibility with a nonstandard/custom response.
+            if not raw_products:
+                raw_products = data.get("results") or []
+
+            filtered_products = []
+
+            for product in raw_products:
+                title = product.get("title") or ""
+                product_brand = (
+                    product.get("brand")
+                    or product.get("specs", {}).get("brand")
+                    or ""
+                )
+
+                # Apply brand filtering locally.
+                if brand:
+                    brand_text = f"{product_brand} {title}".casefold()
+                    if brand.casefold() not in brand_text:
+                        continue
+
+                # Apply price filtering in the marketplace's currency.
+                price = product.get("extracted_price")
+
+                if price is None:
+                    # Do not assume a missing price passes the budget filter.
+                    if min_price is not None or max_price is not None:
+                        continue
+                else:
+                    try:
+                        price = float(price)
+                    except (ValueError, TypeError):
+                        continue
+
+                    if min_price is not None and price < min_price:
+                        continue
+
+                    if max_price is not None and price > max_price:
+                        continue
+
+                filtered_products.append(product)
+
+            # Format only after filtering so out-of-budget items are excluded.
             products = self._format_search_results(
-                data.get("results", []),
-                limit
+                filtered_products,
+                limit,
             )
-            
-            # Extract related searches (can be used as recommendations)
+
             related_searches = [
-                r.get("query", "")
-                for r in data.get("related_searches", [])[:3]
+                item.get("query", "")
+                for item in (data.get("related_searches") or [])[:3]
+                if item.get("query")
             ]
-            
+
             result = {
                 "query": query,
                 "filters": {
                     "max_price": max_price,
                     "min_price": min_price,
-                    "brand": brand
+                    "brand": brand,
                 },
                 "count": len(products),
                 "products": products,
                 "related_searches": related_searches,
-                "has_more": data.get("serpapi_pagination", {}).get("next") is not None,
+                "has_more": (
+                    len(filtered_products) > limit
+                    or data.get("serpapi_pagination", {}).get("next")
+                    is not None
+                ),
                 "from_cache": False,
-                "error": None
+                "error": None,
             }
-            
-            # Cache the result
+
             SerpAPICache.set("amazon", result, **cache_key_params)
-            
             return result
-            
-        except requests.exceptions.RequestException as e:
+
+        except requests.exceptions.HTTPError as exc:
+            # Preserve the response body because it may contain the API error.
+            body = ""
+            if exc.response is not None:
+                body = exc.response.text[:1000]
+
             return {
                 "query": query,
                 "count": 0,
                 "products": [],
-                "related_searches": [],
-                "error": f"API Error: {str(e)}",
+                "error": (
+                    f"HTTP error: {exc}; response: {body}"
+                ),
                 "from_cache": False,
-                "has_more": False
+                "has_more": False,
+            }
+
+        except requests.exceptions.RequestException as exc:
+            return {
+                "query": query,
+                "count": 0,
+                "products": [],
+                "error": f"Network error: {exc}",
+                "from_cache": False,
+                "has_more": False,
+            }
+
+        except ValueError as exc:
+            return {
+                "query": query,
+                "count": 0,
+                "products": [],
+                "error": f"Invalid JSON response: {exc}",
+                "from_cache": False,
+                "has_more": False,
+            }
+
+        except Exception as exc:
+            return {
+                "query": query,
+                "count": 0,
+                "products": [],
+                "error": f"Unexpected error: {exc}",
+                "from_cache": False,
+                "has_more": False,
             }
     
     def get_product_details(

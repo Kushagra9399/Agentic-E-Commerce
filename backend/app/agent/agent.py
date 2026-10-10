@@ -4,24 +4,21 @@ from uuid import UUID
 from decimal import Decimal
 from datetime import date, datetime
 
-from groq import Groq, RateLimitError
+from groq import Groq
 import sys
 
 from app.agent.prompts import SYSTEM_PROMPT
 from app.agent.tools import (
     search_products,
-    get_product,
-    recommend_addons,
-    recommend_upgrade,
+    get_product_info,
     create_cart,
     add_to_cart,
-    get_cart,
-    check_cart_and_budget,
-    approve_purchase,
+    view_cart,
+    review_cart_and_budget,
+    approve_cart_tool,
     create_order,
-    get_all_carts,
-    get_orders,
-    get_order,
+    list_orders,
+    get_order_status,
 )
 
 from app.core.config import settings
@@ -398,8 +395,8 @@ def catalog(
             max_price=max_price,
             min_price=min_price,
             brand=brand,
-            min_discount=min_discount,
-            top_k=top_k,
+            # min_discount=min_discount,
+            # top_k=top_k,
         )
 
         return compact_product_list(result)
@@ -412,8 +409,8 @@ def catalog(
                 "error": "product_id is required."
             }
 
-        result = get_product(
-            product_id=product_id
+        result = get_product_info(
+            asin=product_id
         )
 
         if not result["found"]:
@@ -494,27 +491,9 @@ def product_recommendations(
     Unified recommendation operation.
     """
 
-    if action == "addons":
-
-        result = recommend_addons(
-            product_id=product_id,
-            budget_remaining=budget_remaining,
-            limit=limit,
-        )
-
-        return compact_product_list(result)
-
-    if action == "upgrade":
-
-        result = recommend_upgrade(
-            product_id=product_id
-        )
-
-        return compact_product_list(result)
-
     return {
         "success": False,
-        "error": "Invalid recommendation action."
+        "error": "Product recommendations are built-in to product details."
     }
 
 
@@ -616,7 +595,7 @@ def cart(
                 "error": "cart_id is required."
             }
 
-        result = get_cart(
+        result = view_cart(
             cart_id=cart_id
         )
 
@@ -624,7 +603,7 @@ def cart(
 
     if action == "list":
 
-        result = get_all_carts()
+        result = {"carts": []}
 
         # Keep cart history small
         if isinstance(result, list):
@@ -734,7 +713,7 @@ def checkout(
 
     if action == "get_approval_summary":
 
-        result = check_cart_and_budget(
+        result = review_cart_and_budget(
             cart_id=cart_id,
             session_id=session_id
         )
@@ -747,7 +726,7 @@ def checkout(
 
     if action == "approve":
 
-        result = approve_purchase(
+        result = approve_cart_tool(
             cart_id=cart_id
         )
 
@@ -851,7 +830,7 @@ def orders(
                 "error": "order_id is required."
             }
 
-        result = get_order(
+        result = get_order_status(
             order_id=order_id
         )
 
@@ -859,7 +838,7 @@ def orders(
 
     if action == "list":
 
-        result = get_orders(
+        result = list_orders(
             status=status,
             limit=min(limit, 10),
         )
@@ -1007,19 +986,22 @@ def call_llm(messages):
                 max_tokens=800,
             )
 
-        except RateLimitError:
+        except Exception as rate_limit_e:
+            # Catch rate limit errors specifically
+            if "rate" in str(rate_limit_e).lower():
+                if attempt == 2:
+                    raise
 
-            if attempt == 2:
+                wait_time = 2 ** attempt
+
+                print(
+                    "Groq rate limit hit. "
+                    f"Retrying in {wait_time} seconds..."
+                )
+
+                time.sleep(wait_time)
+            else:
                 raise
-
-            wait_time = 2 ** attempt
-
-            print(
-                "Groq rate limit hit. "
-                f"Retrying in {wait_time} seconds..."
-            )
-
-            time.sleep(wait_time)
 
         except Exception as e:
             # Catch all other Groq errors

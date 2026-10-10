@@ -357,7 +357,7 @@ def review_cart_and_budget(
         return {"success": False, "error": str(e)}
 
 
-def approve_cart(cart_id: str) -> dict:
+def approve_cart_tool(cart_id: str) -> dict:
     """
     Approve cart for payment.
     

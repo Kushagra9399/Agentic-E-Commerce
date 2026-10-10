@@ -6,14 +6,13 @@ from sqlalchemy import (
     Integer,
     Boolean,
     DateTime,
-    Float,
-    func
+    func,
+    ForeignKey
 )
 
 from .database import Base
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import ForeignKey
 
 
 class Merchant(Base):

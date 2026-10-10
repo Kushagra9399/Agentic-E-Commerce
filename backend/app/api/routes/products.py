@@ -3,10 +3,6 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.db.models import Product
-from app.agent.tools import (
-    search_products,
-    get_product
-)
 
 
 router = APIRouter(
@@ -119,6 +115,6 @@ def search(
         max_price=max_price,
         min_price=min_price,
         brand=brand,
-        min_discount=min_discount,
+        # min_discount=min_discount,
         top_k=top_k
     )

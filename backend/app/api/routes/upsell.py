@@ -1,9 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException
 
-from app.db.database import get_db
-from app.db.models import Product
-from app.services.upsell_service import UpsellService
+from app.services.serpapi_service import SerpAPIService
 
 
 router = APIRouter(
@@ -11,60 +8,47 @@ router = APIRouter(
     tags=["Upsell"]
 )
 
-service = UpsellService()
+serpapi = SerpAPIService()
 
 
-@router.get("/{product_id}")
-def get_upsell(
-    product_id: str,
-    db: Session = Depends(get_db)
-):
+@router.get("/{asin}")
+def get_upsell(asin: str):
 
-    product = (
-        db.query(Product)
-        .filter(Product.id == product_id)
-        .first()
-    )
+    result = serpapi.get_product_details(asin=asin)
 
-    if not product:
+    if not result.get("found"):
         raise HTTPException(
             status_code=404,
             detail="Product not found"
         )
 
-    upgrade = service.find_upgrade(
-        db,
-        product
-    )
+    product = result.get("product", {})
+    recommendations = result.get("recommendations", [])
 
-    if not upgrade:
+    if not recommendations:
         return {
             "available": False,
-            "message": "No suitable upgrade found."
+            "message": "No suitable upgrades found."
         }
 
-    difference = (
-        float(upgrade.sale_price)
-        - float(product.sale_price)
-    )
+    # Return best recommendation as upgrade
+    upgrade = recommendations[0]
 
     return {
         "available": True,
 
         "current_product": {
-            "id": product.id,
-            "name": product.name,
-            "price": float(product.sale_price)
+            "asin": asin,
+            "title": product.get("title"),
+            "price": product.get("price"),
+            "brand": product.get("brand")
         },
 
         "upgrade": {
-            "id": upgrade.id,
-            "name": upgrade.name,
-            "price": float(upgrade.sale_price)
-        },
-
-        "additional_cost": round(
-            difference,
-            2
-        )
+            "asin": upgrade.get("asin"),
+            "title": upgrade.get("title"),
+            "price": upgrade.get("price"),
+            "brand": upgrade.get("brand"),
+            "reason": "Premium alternative with better features"
+        }
     }

@@ -1,8 +1,6 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException
 
-from app.db.database import get_db
-from app.services.recommendation_service import RecommendationService
+from app.services.serpapi_service import SerpAPIService
 
 
 router = APIRouter(
@@ -10,36 +8,36 @@ router = APIRouter(
     tags=["Recommendations"]
 )
 
-recommendation_ser = RecommendationService()
+serpapi = SerpAPIService()
 
-@router.get("/{product_id}")
-def get_recommendations(
-    product_id: str,
-    db: Session = Depends(get_db)
-):
 
-    recommendations = recommendation_ser.get_cross_sell_products(
-        db=db,
-        product_id=product_id,
-        limit=3
-    )
+@router.get("/{asin}")
+def get_recommendations(asin: str):
+
+    result = serpapi.get_product_details(asin=asin)
+
+    if not result.get("found"):
+        raise HTTPException(
+            status_code=404,
+            detail="Product not found"
+        )
+
+    add_ons = result.get("add_ons", [])
 
     return {
-        "product_id": product_id,
-        "recommendation_type": "cross_sell",
-        "count": len(recommendations),
+        "asin": asin,
+        "recommendation_type": "frequently_bought_together",
+        "count": len(add_ons),
         "products": [
             {
-                "id": product.id,
-                "name": product.name,
-                "brand": product.brand,
-                "category": product.category,
-                "sale_price": float(product.sale_price),
-                "market_price": float(product.market_price),
-                "discount": float(product.discount_percent),
-                "stock": product.stock,
-                "overview": product.overview,
+                "asin": item.get("asin"),
+                "title": item.get("title"),
+                "brand": item.get("brand"),
+                "price": item.get("price"),
+                "discount": item.get("discount_percent"),
+                "rating": item.get("rating"),
+                "in_stock": item.get("in_stock")
             }
-            for product in recommendations
+            for item in add_ons
         ]
     }

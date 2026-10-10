@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db.database import engine, Base
-from app.db.models import Merchant, Product
+from app.db import models  # Import models module to register models
 from app.api.routes.products import router as product_router
 from app.api.routes.search import router as search_router
 from app.api.routes.cart import router as cart_router
