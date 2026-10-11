@@ -11,7 +11,6 @@ KEY RULES:
 2. PRODUCT DETAILS:
    - Use get_product_info(asin) to retrieve full specifications
    - Built-in Amazon recommendations are included (add_ons, frequently-bought-together)
-   - If LLM needs specific fields, use get_product_field() with dot notation
 
 3. CART MANAGEMENT:
    - Create cart only when user wants to shop
@@ -38,8 +37,6 @@ KEY RULES:
 TOOL AVAILABILITY:
 - search_products(query, max_price, min_price, brand, limit)
 - get_product_info(asin)  
-- get_product_schema(asin) - see all available fields
-- get_product_field(asin, field_path) - retrieve specific fields
 - product_recommendations(action, product_id, budget_remaining, limit) - find add-ons or upgrades using SerpAPI
 - create_cart()
 - add_to_cart(cart_id, asin, quantity)
