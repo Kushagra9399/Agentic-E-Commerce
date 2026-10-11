@@ -483,11 +483,29 @@ class SerpAPIService:
         original_price = 0
         
         # Try to get price from purchase_options (Amazon's standard format)
-        purchase_options = data.get("purchase_options", {})
-        if purchase_options.get("Amazon"):
-            amazon_option = purchase_options["Amazon"]
+        purchase_options = data.get("purchase_options") or {}
+        if isinstance(purchase_options, dict):
+            amazon_option = purchase_options.get("Amazon")
             if isinstance(amazon_option, dict):
-                price = self._parse_price(amazon_option.get("price", "0"))
+                price = self._parse_price(
+                    amazon_option.get("extracted_primary_price")
+                    or amazon_option.get("primary_price")
+                    or amazon_option.get("extracted_price")
+                    or amazon_option.get("price")
+                )
+        elif isinstance(purchase_options, list):
+            for option in purchase_options:
+                if not isinstance(option, dict):
+                    continue
+                candidate_price = (
+                    option.get("extracted_primary_price")
+                    or option.get("primary_price")
+                    or option.get("extracted_price")
+                    or option.get("price")
+                )
+                price = self._parse_price(candidate_price)
+                if price > 0:
+                    break
         
         # Fallback to extracted_price from product_results
         if price == 0:
@@ -545,7 +563,7 @@ class SerpAPIService:
         return {
             "asin": product.get("asin", ""),
             "title": product.get("title", ""),
-            "brand": product.get("brand") or product.get("specs", {}).get("brand", "Unknown"),
+            "brand": product.get("brand") or (product.get("specs") or {}).get("brand", "Unknown"),
             "price": price,
             "original_price": original_price,
             "discount_percent": discount_percent,
