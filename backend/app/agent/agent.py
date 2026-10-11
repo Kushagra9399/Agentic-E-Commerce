@@ -415,13 +415,9 @@ CATALOG_TOOL = {
                     "type": "string"
                 },
 
-                "min_discount": {
-                    "type": "number"
-                },
-
-                "top_k": {
+                "limit": {
                     "type": "integer",
-                    "default": 5
+                    "description": "Max results (default 5)."
                 }
             },
 
@@ -440,8 +436,7 @@ def catalog(
     max_price=None,
     min_price=None,
     brand=None,
-    min_discount=None,
-    top_k=5,
+    limit=5,
 ):
     """
     Unified catalog operation.
@@ -454,8 +449,7 @@ def catalog(
             max_price=max_price,
             min_price=min_price,
             brand=brand,
-            # min_discount=min_discount,
-            # top_k=top_k,
+            limit=limit,
         )
 
         return compact_product_list(result)
