@@ -139,44 +139,6 @@ def get_product_info(asin: str) -> dict:
     }
 
 
-def get_product_schema(asin: str) -> dict:
-    """
-    Get available fields/keys for a product's detailed information.
-    
-    Use this to understand what data is available before requesting
-    specific fields with get_product_field().
-    
-    Args:
-        asin: Product ASIN
-    
-    Returns:
-        Nested structure showing all available keys and their types
-    """
-    return serpapi.get_product_keys(asin=asin)
-
-
-def get_product_field(asin: str, field_path: str) -> dict:
-    """
-    Retrieve a specific field from product data using dot notation.
-    
-    Use get_product_schema() first to understand available fields.
-    
-    Examples:
-    - field_path="title" → product title
-    - field_path="price" → product price
-    - field_path="specifications.processor" → processor specs
-    - field_path="rating" → product rating
-    
-    Args:
-        asin: Product ASIN
-        field_path: Dot-notation path (e.g., "specifications.memory")
-    
-    Returns:
-        Requested field value
-    """
-    return serpapi.get_product_field(asin=asin, field_path=field_path)
-
-
 def recommend_products(
     action: str,
     product_id: str,
