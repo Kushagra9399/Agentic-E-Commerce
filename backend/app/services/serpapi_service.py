@@ -348,72 +348,6 @@ class SerpAPIService:
                 "from_cache": False
             }
     
-    def get_product_keys(self, asin: str) -> Dict[str, Any]:
-        """
-        Get all available keys/fields in a product's JSON structure.
-        
-        Useful for LLM to know what information can be queried.
-        
-        Args:
-            asin: Product ASIN
-        
-        Returns:
-            Dict with nested key structure
-        """
-        product_data = self.get_product_details(asin)
-        
-        if not product_data.get("found"):
-            return {"error": "Product not found"}
-        
-        product = product_data.get("product", {})
-        keys = self._extract_nested_keys(product)
-        
-        return {
-            "asin": asin,
-            "available_keys": keys,
-            "total_fields": self._count_keys(keys)
-        }
-    
-    def get_product_field(
-        self,
-        asin: str,
-        field_path: str
-    ) -> Dict[str, Any]:
-        """
-        Retrieve a specific field from product data using dot notation.
-        
-        Example:
-        - field_path="product.title" → returns product title
-        - field_path="rating" → returns rating
-        - field_path="buybox_winner.price" → returns price
-        
-        Args:
-            asin: Product ASIN
-            field_path: Dot-notation path to field (e.g., "product.title")
-        
-        Returns:
-            Dict with requested field value
-        """
-        product_data = self.get_product_details(asin)
-        
-        if not product_data.get("found"):
-            return {"error": "Product not found"}
-        
-        # Navigate through the nested structure
-        value = product_data.get("product", {})
-        
-        for key in field_path.split("."):
-            if isinstance(value, dict):
-                value = value.get(key)
-            else:
-                return {"error": f"Cannot access {key} in non-dict"}
-        
-        return {
-            "asin": asin,
-            "field": field_path,
-            "value": value
-        }
-    
     def _format_search_results(
         self,
         results: List[Dict],
@@ -687,44 +621,6 @@ class SerpAPIService:
                 break
 
         return recommendations
-    
-    def _extract_nested_keys(self, obj: Any, prefix: str = "") -> Dict[str, Any]:
-        """
-        Recursively extract nested keys from object for LLM awareness.
-        
-        Example output:
-        {
-            "product": {"title": str, "brand": str},
-            "rating": float,
-            "price": float
-        }
-        """
-        if isinstance(obj, dict):
-            keys = {}
-            for key, value in obj.items():
-                if isinstance(value, (dict, list)):
-                    keys[key] = self._extract_nested_keys(value, f"{prefix}.{key}")
-                else:
-                    keys[key] = type(value).__name__
-            return keys
-        elif isinstance(obj, list):
-            if obj:
-                return [self._extract_nested_keys(obj[0], prefix)]
-            return []
-        else:
-            return type(obj).__name__
-    
-    def _count_keys(self, keys_dict: Dict) -> int:
-        """Count total number of keys in nested structure."""
-        count = 0
-        for value in keys_dict.values():
-            if isinstance(value, dict):
-                count += 1 + self._count_keys(value)
-            elif isinstance(value, list):
-                count += 1
-            else:
-                count += 1
-        return count
     
     def _parse_price(self, price_str: str) -> float:
         """Parse price string and return float value in rupees."""
