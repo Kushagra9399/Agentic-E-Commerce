@@ -186,7 +186,7 @@ def add_to_cart(
             from app.db.models import Product
             product = (
                 db.query(Product)
-                .filter(Product.asin == asin)
+                .filter(Product.external_id == asin, Product.source_type == "amazon")
                 .first()
             )
             
@@ -201,10 +201,11 @@ def add_to_cart(
                     }
                 
                 # Cache in DB
-                from app.services.product_cache_service import create_or_get_product_from_asin
-                product = create_or_get_product_from_asin(
+                from app.services.product_cache_service import create_or_get_product_from_external_id
+                product = create_or_get_product_from_external_id(
                     db=db,
-                    asin=asin,
+                    external_id=asin,
+                    source_type="amazon",
                     product_data=product_detail.get("product")
                 )
             
