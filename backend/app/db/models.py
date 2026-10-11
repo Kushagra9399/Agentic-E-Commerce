@@ -7,7 +7,8 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     func,
-    ForeignKey
+    ForeignKey,
+    UniqueConstraint
 )
 
 from .database import Base
@@ -43,6 +44,10 @@ class Merchant(Base):
 class Product(Base):
     __tablename__ = "products"
 
+    __table_args__ = (
+        UniqueConstraint("source_type", "external_id", name="uq_products_source_external_id"),
+    )
+
     id = Column(
         String(36),
         primary_key=True
@@ -53,13 +58,8 @@ class Product(Base):
         nullable=False
     )
 
-    # ASIN (Amazon Standard Identification Number) for SerpAPI integration
-    asin = Column(
-        String(20),
-        nullable=True,
-        unique=True,
-        index=True
-    )
+    # Provider-specific ID (ASIN for Amazon today); internal relations use Product.id.
+    external_id = Column(String(100), nullable=True)
 
     source_id = Column(
         Integer,
@@ -133,12 +133,8 @@ class Product(Base):
         default=True
     )
 
-    # Track if product is from local DB or SerpAPI
-    source_type = Column(
-        String(20),
-        nullable=False,
-        default="local"  # "local" or "serpapi"
-    )
+    # Namespace for external_id, e.g. "amazon" or another marketplace.
+    source_type = Column(String(30), nullable=False, default="local")
 
     created_at = Column(
         DateTime,
