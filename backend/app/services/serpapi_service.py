@@ -278,10 +278,35 @@ class SerpAPIService:
             
             product = self._format_product_details(data)
             
-            # Extract recommended products and add-ons if available
+            # Prefer recommendations embedded in the product response. If Amazon
+            # does not return them, retrieve candidates through the same SerpAPI
+            # Amazon search service so all displayed product data has one source.
             add_ons = self._extract_addons(data)
             recommendations = self._extract_recommendations(data)
-            
+            current = product.get("asin") or asin
+
+            if not add_ons and product.get("title"):
+                addon_result = self.search_products(
+                    query=f"{product['title']} compatible accessories",
+                    limit=5,
+                    amazon_domain=amazon_domain,
+                )
+                add_ons = [
+                    item for item in addon_result.get("products", [])
+                    if item.get("asin") != current
+                ][:3]
+
+            if not recommendations and product.get("title"):
+                rec_result = self.search_products(
+                    query=f"{product['title']} similar alternatives",
+                    limit=5,
+                    amazon_domain=amazon_domain,
+                )
+                recommendations = [
+                    item for item in rec_result.get("products", [])
+                    if item.get("asin") != current
+                ][:3]
+
             result = {
                 "found": True,
                 "product": product,
@@ -382,29 +407,57 @@ class SerpAPIService:
         
         for result in results[:limit]:
             try:
-                price = self._parse_price(result.get("price", "0"))
-                original_price = self._parse_price(
-                    result.get("price_strikethrough", result.get("old_price", "0"))
+                # SerpAPI Amazon organic results commonly expose numeric price
+                # as extracted_price, while price may be a formatted string.
+                raw_price = result.get("extracted_price")
+                if raw_price is None:
+                    raw_price = result.get("price")
+                price = self._parse_price(raw_price)
+
+                raw_original_price = (
+                    result.get("extracted_old_price")
+                    or result.get("price_strikethrough")
+                    or result.get("old_price")
                 )
+                original_price = self._parse_price(raw_original_price)
+
                 discount_percent = 0
-                if original_price > 0:
+                if original_price > price > 0:
                     discount_percent = round((1 - price / original_price) * 100)
-                
+                elif result.get("discount"):
+                    try:
+                        discount_percent = int(
+                            str(result.get("discount")).replace("%", "").strip()
+                        )
+                    except (TypeError, ValueError):
+                        discount_percent = 0
+
+                title = result.get("title") or ""
+                brand = result.get("brand") or result.get("manufacturer")
+                if not brand and title:
+                    brand = title.split()[0].strip(",-") or "Unknown"
+
                 product = {
-                    "asin": result.get("asin", ""),
-                    "title": result.get("title", ""),
-                    "brand": result.get("brand", "Unknown"),
-                    "price": price,
-                    "original_price": original_price,
+                    "asin": result.get("asin") or result.get("product_id") or "",
+                    "title": title,
+                    "brand": brand or "Unknown",
+                    "price": price if price > 0 else None,
+                    "original_price": original_price if original_price > 0 else None,
                     "discount_percent": discount_percent,
-                    "rating": result.get("rating", 0),
-                    "review_count": result.get("review_count", 0),
-                    "link": result.get("link", ""),
-                    "image": result.get("image", ""),
+                    "rating": result.get("rating"),
+                    "review_count": (
+                        result.get("reviews")
+                        or result.get("review_count")
+                        or result.get("reviews_count")
+                    ),
+                    "link": result.get("link") or result.get("link_clean") or "",
+                    "image": result.get("thumbnail") or result.get("image") or "",
                     "in_stock": result.get("in_stock", True),
+                    "source": "serpapi_amazon",
                 }
-                
-                if product["asin"]:
+
+                # Keep useful results even if Amazon omits the ASIN field.
+                if product["title"] and product["price"] is not None:
                     formatted.append(product)
             except Exception as e:
                 print(f"Error formatting product: {e}")
@@ -515,20 +568,37 @@ class SerpAPIService:
         """
         addons = []
         
-        # Check for bought_together products
-        bought_together = data.get("bought_together", [])
-        if bought_together:
-            for item in bought_together[:3]:
-                if isinstance(item, dict):
-                    addon = {
-                        "asin": item.get("asin", ""),
-                        "title": item.get("title", ""),
-                        "price": self._parse_price(item.get("price", "0")),
-                        "image": item.get("thumbnail", ""),
-                    }
-                    if addon["asin"]:
-                        addons.append(addon)
-        
+        # SerpAPI's Amazon product response has used different field names
+        # for frequently-bought-together items over time.
+        candidates = (
+            data.get("bought_together")
+            or data.get("frequently_bought_together")
+            or data.get("frequently_bought_together_products")
+            or []
+        )
+        if isinstance(candidates, dict):
+            candidates = candidates.get("products") or candidates.get("items") or []
+
+        for item in candidates:
+            if not isinstance(item, dict):
+                continue
+            asin = item.get("asin") or item.get("product_id") or ""
+            title = item.get("title") or item.get("name") or ""
+            if not title:
+                continue
+            addons.append({
+                "asin": asin,
+                "title": title,
+                "brand": item.get("brand") or (title.split()[0] if title else "Unknown"),
+                "price": self._parse_price(item.get("extracted_price", item.get("price"))),
+                "rating": item.get("rating"),
+                "image": item.get("thumbnail") or item.get("image") or "",
+                "link": item.get("link") or "",
+                "source": "serpapi_amazon",
+            })
+            if len(addons) >= 3:
+                break
+
         return addons
     
     def _extract_recommendations(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -538,21 +608,35 @@ class SerpAPIService:
         """
         recommendations = []
         
-        # Check for related_products
-        related_products = data.get("related_products", [])
-        if related_products:
-            for item in related_products[:3]:
-                if isinstance(item, dict):
-                    rec = {
-                        "asin": item.get("asin", ""),
-                        "title": item.get("title", ""),
-                        "price": self._parse_price(item.get("price", "0")),
-                        "image": item.get("thumbnail", ""),
-                        "rating": item.get("rating", 0),
-                    }
-                    if rec["asin"]:
-                        recommendations.append(rec)
-        
+        related_products = (
+            data.get("related_products")
+            or data.get("also_bought")
+            or data.get("similar_products")
+            or data.get("customers_also_viewed")
+            or []
+        )
+        if isinstance(related_products, dict):
+            related_products = related_products.get("products") or related_products.get("items") or []
+
+        for item in related_products:
+            if not isinstance(item, dict):
+                continue
+            title = item.get("title") or item.get("name") or ""
+            if not title:
+                continue
+            recommendations.append({
+                "asin": item.get("asin") or item.get("product_id") or "",
+                "title": title,
+                "brand": item.get("brand") or (title.split()[0] if title else "Unknown"),
+                "price": self._parse_price(item.get("extracted_price", item.get("price"))),
+                "image": item.get("thumbnail") or item.get("image") or "",
+                "rating": item.get("rating"),
+                "link": item.get("link") or "",
+                "source": "serpapi_amazon",
+            })
+            if len(recommendations) >= 3:
+                break
+
         return recommendations
     
     def _extract_nested_keys(self, obj: Any, prefix: str = "") -> Dict[str, Any]:
