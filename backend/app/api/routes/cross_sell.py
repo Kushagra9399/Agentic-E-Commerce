@@ -30,15 +30,21 @@ def get_recommendations(asin: str):
         "count": len(add_ons),
         "products": [
             {
-                "asin": item.get("asin"),
-                "title": item.get("title"),
+                "id": item.get("asin") or item.get("product_id") or "",
+                "asin": item.get("asin") or item.get("product_id") or "",
+                "name": item.get("title") or item.get("name") or "",
+                "title": item.get("title") or item.get("name") or "",
                 "brand": item.get("brand"),
-                "price": item.get("price"),
+                "price": item.get("price") or item.get("extracted_price"),
+                "sale_price": item.get("price") or item.get("extracted_price"),
+                "market_price": item.get("original_price") or item.get("extracted_old_price"),
+                "discount": item.get("discount_percent", 0),
                 "discount_percent": item.get("discount_percent", 0),
                 "rating": item.get("rating"),
                 "image": item.get("image") or item.get("thumbnail"),
                 "link": item.get("link") or item.get("link_clean"),
                 "source": item.get("source", "serpapi_amazon"),
+                "stock": 1 if item.get("in_stock", True) else 0,
                 "in_stock": item.get("in_stock", True)
             }
             for item in add_ons
