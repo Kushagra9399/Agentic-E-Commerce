@@ -50,11 +50,36 @@ def add_item(
 ):
 
     try:
+        # Frontend recommendation/search cards use the Amazon ASIN as their ID.
+        # Resolve local product IDs first, then ASINs, and cache missing Amazon
+        # products before passing the internal Product.id to cart service.
+        product = db.query(Product).filter(
+            Product.id == request.product_id
+        ).first()
+
+        if not product:
+            product = db.query(Product).filter(
+                Product.asin == request.product_id
+            ).first()
+
+        if not product:
+            from app.services.serpapi_service import SerpAPIService
+            from app.services.product_cache_service import create_or_get_product_from_asin
+
+            details = SerpAPIService().get_product_details(asin=request.product_id)
+            if not details.get("found"):
+                raise ValueError(details.get("error") or "Product not found in SerpAPI.")
+
+            product = create_or_get_product_from_asin(
+                db=db,
+                asin=request.product_id,
+                product_data=details.get("product") or {},
+            )
 
         item = add_product_to_cart(
             db=db,
             cart_id=cart_id,
-            product_id=request.product_id,
+            product_id=product.id,
             quantity=request.quantity
         )
 
