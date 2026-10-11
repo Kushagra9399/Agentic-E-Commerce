@@ -40,6 +40,8 @@ class SerpAPIService:
             "brand": brand,
             "limit": limit,
             "amazon_domain": amazon_domain,
+            # Invalidate entries created before the normalized parser fix.
+            "format_version": 2,
         }
 
         # Validate input before making the request.
@@ -259,7 +261,12 @@ class SerpAPIService:
             Dict with complete product details and recommendations
         """
         # Check cache first
-        cache_key_params = {"asin": asin, "amazon_domain": amazon_domain}
+        cache_key_params = {
+            "asin": asin,
+            "amazon_domain": amazon_domain,
+            # Avoid serving product-detail payloads cached before normalization.
+            "format_version": 2,
+        }
         cached = SerpAPICache.get("amazon_product", **cache_key_params)
         if cached:
             cached["from_cache"] = True
