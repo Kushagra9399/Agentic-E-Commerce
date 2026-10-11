@@ -325,7 +325,6 @@ The data pipeline added and/or normalized fields required by the application, in
 ```text
 product_id
 merchant_id
-source_id
 name
 brand
 category

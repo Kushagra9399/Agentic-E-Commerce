@@ -37,7 +37,6 @@ User Query → SerpAPI Amazon Engine → Real-time Amazon Products → Agent
 2. **`backend/app/db/models.py`**
    - Added `asin` column to Product model
    - Added `source_type` field ("local" or "serpapi")
-   - Made `source_id` nullable
 
 3. **`backend/app/services/cart_service.py`**
    - Updated `add_product_to_cart()` to handle ASIN lookups
@@ -79,8 +78,6 @@ CREATE INDEX idx_products_asin ON products(asin);
 -- Add source_type column
 ALTER TABLE products ADD COLUMN source_type VARCHAR(20) DEFAULT 'local';
 
--- Make source_id nullable
-ALTER TABLE products ALTER COLUMN source_id DROP NOT NULL;
 ```
 
 **If using Alembic** (Django/SQLAlchemy migrations):

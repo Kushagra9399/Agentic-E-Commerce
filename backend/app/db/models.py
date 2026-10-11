@@ -61,11 +61,6 @@ class Product(Base):
     # Provider-specific ID (ASIN for Amazon today); internal relations use Product.id.
     external_id = Column(String(100), nullable=True)
 
-    source_id = Column(
-        Integer,
-        nullable=True
-    )
-
     link = Column(
         Text,
         nullable=False

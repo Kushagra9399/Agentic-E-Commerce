@@ -68,7 +68,6 @@ def create_or_get_product_from_external_id(
         merchant_id="CROMA_DEMO",
         external_id=external_id,
         source_type=source_type,
-        source_id=None,
         link=product_data.get("link") or "",
         name=title,
         brand=brand,
