@@ -96,11 +96,6 @@ class Product(Base):
         nullable=True
     )
 
-    specification = Column(
-        Text,
-        nullable=False
-    )
-
     search_text = Column(
         Text,
         nullable=False
@@ -144,11 +139,6 @@ class Product(Base):
     updated_at = Column(
         DateTime,
         server_default=func.now()
-    )
-
-    embedding = Column(
-        Vector(384),
-        nullable=True
     )
 
 
@@ -396,43 +386,6 @@ class AuditLog(Base):
     details = Column(
         Text,
         nullable=True
-    )
-
-    created_at = Column(
-        DateTime,
-        server_default=func.now()
-    )
-
-
-class ProductRelation(Base):
-    __tablename__ = "product_relations"
-
-    id = Column(
-        String(36),
-        primary_key=True
-    )
-
-    source_product_id = Column(
-        String(36),
-        ForeignKey("products.id"),
-        nullable=False
-    )
-
-    target_product_id = Column(
-        String(36),
-        ForeignKey("products.id"),
-        nullable=False
-    )
-
-    relation_type = Column(
-        String(30),
-        nullable=False
-    )
-
-    priority = Column(
-        Integer,
-        nullable=False,
-        default=1
     )
 
     created_at = Column(
