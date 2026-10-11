@@ -247,15 +247,26 @@ def compact_cart(cart):
     if not isinstance(cart, dict):
         return cart
 
-    # Handle both cart objects and nested 'cart' key
-    cart_obj = cart.get("cart") if "cart" in cart else cart
+    if cart.get("success") is False:
+        return cart
+
+    # Handle both direct cart responses and nested cart details.
+    nested_cart = cart.get("cart")
+    cart_obj = nested_cart if isinstance(nested_cart, dict) else cart
 
     result = {
         "cart_id": cart_obj.get("id") or cart_obj.get("cart_id"),
         "status": cart_obj.get("status"),
-        "total": cart_obj.get("total"),
+        "total": cart_obj.get("total", cart_obj.get("subtotal")),
         "currency": cart_obj.get("currency", "INR"),
     }
+
+    if cart.get("success") is not None:
+        result["success"] = cart["success"]
+    if cart.get("message"):
+        result["message"] = cart["message"]
+    if cart.get("error"):
+        result["error"] = cart["error"]
 
     items = cart_obj.get("items")
 
@@ -496,9 +507,12 @@ def cart(
 
         result = add_to_cart(
             cart_id=cart_id,
-            product_id=product_id,
+            asin=product_id,
             quantity=quantity,
         )
+
+        if isinstance(result, dict) and result.get("success") is False:
+            return result
 
         return compact_cart(result)
 
