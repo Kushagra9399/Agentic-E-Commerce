@@ -38,7 +38,9 @@ def get_upsell(asin: str):
         "available": True,
 
         "current_product": {
+            "id": asin,
             "asin": asin,
+            "name": product.get("title"),
             "title": product.get("title"),
             "price": product.get("price"),
             "brand": product.get("brand"),
@@ -47,8 +49,10 @@ def get_upsell(asin: str):
         },
 
         "upgrade": {
-            "asin": upgrade.get("asin"),
-            "title": upgrade.get("title"),
+            "id": upgrade.get("asin") or upgrade.get("product_id") or "",
+            "asin": upgrade.get("asin") or upgrade.get("product_id") or "",
+            "name": upgrade.get("title") or upgrade.get("name") or "",
+            "title": upgrade.get("title") or upgrade.get("name") or "",
             "price": upgrade.get("price") or upgrade.get("extracted_price"),
             "brand": upgrade.get("brand"),
             "image": upgrade.get("image") or upgrade.get("thumbnail"),
