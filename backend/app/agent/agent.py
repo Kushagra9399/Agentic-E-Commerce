@@ -1,5 +1,6 @@
 import json
 import time
+import random
 from uuid import UUID
 from decimal import Decimal
 from datetime import date, datetime
@@ -30,9 +31,12 @@ from app.agent.session import get_session
 # ============================================================
 
 MAX_TOOL_ROUNDS = 5
-# Reduced for 8k tokens/min Groq limit
 MAX_HISTORY_MESSAGES = 14
 MAX_TOOL_RESULT_CHARS = 8000
+MAX_PROMPT_TOKENS = 7000
+MAX_GROQ_RETRIES = 5
+BACKOFF_BASE_SECONDS = 1
+BACKOFF_MAX_SECONDS = 30
 
 MODEL = "openai/gpt-oss-20b"
 
@@ -892,21 +896,88 @@ def validate_tools():
                 )
 
 
+def estimate_prompt_tokens(messages):
+    """
+    Estimate prompt tokens conservatively without adding a tokenizer dependency.
+    Includes message payloads and tool schemas; the estimate is approximate.
+    """
+    payload = safe_json_dumps(messages) + safe_json_dumps(tools)
+    return (len(payload) + 3) // 4
+
+
+def trim_prompt_to_token_limit(messages, max_tokens=MAX_PROMPT_TOKENS):
+    """
+    Keep the system instructions and remove the oldest conversation content
+    first until the prompt estimate fits the configured budget.
+    """
+    if not messages:
+        return messages
+
+    system_message = next(
+        (message for message in messages if message.get("role") == "system"),
+        None,
+    )
+    conversation = [
+        message for message in messages
+        if message.get("role") != "system"
+    ]
+
+    while conversation and estimate_prompt_tokens(
+        ([system_message] if system_message else []) + conversation
+    ) > max_tokens:
+        conversation.pop(0)
+
+    trimmed = ([system_message] if system_message else []) + conversation
+    estimated_tokens = estimate_prompt_tokens(trimmed)
+    print(
+        f"[Groq] Estimated prompt size: {estimated_tokens} tokens "
+        f"(limit: {max_tokens})"
+    )
+
+    if estimated_tokens > max_tokens:
+        raise ValueError(
+            "The system prompt and tool schemas exceed the 7000-token prompt budget."
+        )
+
+    messages[:] = trimmed
+    return messages
+
+
+def is_rate_limit_error(error):
+    status_code = getattr(error, "status_code", None)
+    error_text = str(error).lower()
+    return (
+        status_code == 429
+        or "rate limit" in error_text
+        or "rate_limit_exceeded" in error_text
+        or "too many requests" in error_text
+        or "tokens per minute" in error_text
+        or "requests per minute" in error_text
+    )
+
+
+def retry_after_seconds(error):
+    response = getattr(error, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers:
+        value = headers.get("retry-after") or headers.get("x-ratelimit-reset-requests")
+        if value:
+            try:
+                return max(0.0, float(value))
+            except (TypeError, ValueError):
+                pass
+    return None
+
+
 def call_llm(messages):
-    """
-    Call Groq with retry handling and error management.
+    """Call Groq with prompt trimming and bounded exponential-backoff retries."""
+    validate_tools()
+    trim_prompt_to_token_limit(messages)
 
-    Exponential backoff is preferable to a fixed 5-second
-    retry because rate limits can persist for different
-    durations.
-    """
-
-    for attempt in range(3):
-
+    for attempt in range(MAX_GROQ_RETRIES + 1):
         try:
-            # Validate tools before sending
-            validate_tools()
-
+            # Recheck immediately before every request in case history changed.
+            trim_prompt_to_token_limit(messages)
             return client.chat.completions.create(
                 model=MODEL,
                 messages=messages,
@@ -914,37 +985,34 @@ def call_llm(messages):
                 tool_choice="auto",
                 max_tokens=800,
             )
-
-        except Exception as rate_limit_e:
-            # Catch rate limit errors specifically
-            if "rate" in str(rate_limit_e).lower():
-                if attempt == 2:
+        except Exception as error:
+            if not is_rate_limit_error(error) or attempt >= MAX_GROQ_RETRIES:
+                if is_rate_limit_error(error):
+                    print(
+                        f"Groq rate limit persisted after {MAX_GROQ_RETRIES} retries.",
+                        file=sys.stderr,
+                    )
                     raise
-
-                wait_time = 2 ** attempt
-
-                print(
-                    "Groq rate limit hit. "
-                    f"Retrying in {wait_time} seconds..."
-                )
-
-                time.sleep(wait_time)
-            else:
+                error_msg = str(error)
+                print(f"Groq API error: {error_msg}", file=sys.stderr)
                 raise
 
-        except Exception as e:
-            # Catch all other Groq errors
-            error_msg = str(e)
-            print(
-                f"Groq API error (attempt {attempt + 1}/3): {error_msg}",
-                file=sys.stderr
+            exponential_delay = min(
+                BACKOFF_MAX_SECONDS,
+                BACKOFF_BASE_SECONDS * (2 ** attempt),
             )
-            if attempt == 2:
-                # Last attempt failed, raise with context
-                raise RuntimeError(
-                    f"Groq API failed after 3 attempts: {error_msg}"
-                ) from e
-            time.sleep(2 ** attempt)
+            wait_time = retry_after_seconds(error)
+            if wait_time is None:
+                wait_time = exponential_delay + random.uniform(0, 0.5)
+            else:
+                wait_time = min(BACKOFF_MAX_SECONDS, wait_time)
+
+            print(
+                f"Groq rate limit hit (attempt {attempt + 1}/"
+                f"{MAX_GROQ_RETRIES + 1}). Retrying in {wait_time:.1f}s...",
+                file=sys.stderr,
+            )
+            time.sleep(wait_time)
 
 
 # ============================================================
