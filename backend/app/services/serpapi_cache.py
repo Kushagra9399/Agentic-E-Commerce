@@ -9,10 +9,10 @@ Stores all SerpAPI requests/responses in database to:
 
 import json
 import hashlib
+import re
+from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import Column, String, Text, DateTime, func
 
 
 class SerpAPICache:
@@ -21,9 +21,22 @@ class SerpAPICache:
     Uses a simple in-memory dict; can be migrated to DB table if needed.
     """
     
-    # In-memory cache with 24-hour TTL
+    # Fast in-memory cache plus persistent JSON files, with a 24-hour TTL.
     _cache: Dict[str, Dict[str, Any]] = {}
     _ttl_hours = 24
+    _cache_dir = Path(__file__).resolve().parents[2] / "data" / "serpapi"
+
+    @staticmethod
+    def _file_path(engine: str, params: Dict[str, Any]) -> Path:
+        if engine == "amazon" and params.get("k"):
+            identity = str(params["k"])
+            folder = SerpAPICache._cache_dir / "searches"
+        else:
+            identity = str(params.get("asin") or engine)
+            folder = SerpAPICache._cache_dir / "products"
+        slug = re.sub(r"[^a-z0-9]+", "-", identity.casefold()).strip("-")[:60] or "cache"
+        suffix = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()[:8]
+        return folder / f"{slug}-{suffix}.json"
     
     @staticmethod
     def get_cache_key(engine: str, **params) -> str:
@@ -54,21 +67,32 @@ class SerpAPICache:
             Cached response dict or None if expired/not found
         """
         cache_key = SerpAPICache.get_cache_key(engine, **params)
-        
-        if cache_key in SerpAPICache._cache:
-            entry = SerpAPICache._cache[cache_key]
-            
-            # Check if expired
-            timestamp = entry.get("timestamp")
-            if timestamp:
+        entry = SerpAPICache._cache.get(cache_key)
+        path = SerpAPICache._file_path(engine, params)
+
+        if entry is None and path.exists():
+            try:
+                entry = json.loads(path.read_text(encoding="utf-8"))
+                SerpAPICache._cache[cache_key] = entry
+            except (OSError, json.JSONDecodeError):
+                return None
+
+        if not entry:
+            return None
+
+        timestamp = entry.get("timestamp")
+        if timestamp:
+            try:
                 elapsed = datetime.now() - datetime.fromisoformat(timestamp)
                 if elapsed > timedelta(hours=SerpAPICache._ttl_hours):
-                    del SerpAPICache._cache[cache_key]
+                    SerpAPICache._cache.pop(cache_key, None)
+                    path.unlink(missing_ok=True)
                     return None
-            
-            return entry.get("data")
-        
-        return None
+            except (ValueError, TypeError):
+                SerpAPICache._cache.pop(cache_key, None)
+                return None
+
+        return entry.get("data")
     
     @staticmethod
     def set(engine: str, data: Dict[str, Any], **params) -> None:
@@ -81,13 +105,19 @@ class SerpAPICache:
             **params: Query parameters
         """
         cache_key = SerpAPICache.get_cache_key(engine, **params)
-        
-        SerpAPICache._cache[cache_key] = {
+        entry = {
             "data": data,
             "timestamp": datetime.now().isoformat(),
             "engine": engine,
-            "params": params
+            "params": params,
         }
+        SerpAPICache._cache[cache_key] = entry
+        path = SerpAPICache._file_path(engine, params)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(entry, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError as exc:
+            print(f"[SerpAPICache] Could not persist cache file: {exc}")
     
     @staticmethod
     def clear() -> None:
