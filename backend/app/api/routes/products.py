@@ -95,7 +95,10 @@ def get_product(
     if not product:
         product = (
             db.query(Product)
-            .filter(Product.asin == product_id)
+            .filter(
+                Product.external_id == product_id,
+                Product.source_type == "amazon",
+            )
             .first()
         )
 
@@ -104,13 +107,14 @@ def get_product(
         # the same product can be opened in the existing detail UI.
         try:
             from app.services.serpapi_service import SerpAPIService
-            from app.services.product_cache_service import create_or_get_product_from_asin
+            from app.services.product_cache_service import create_or_get_product_from_external_id
 
             details = SerpAPIService().get_product_details(asin=product_id)
             if details.get("found"):
-                product = create_or_get_product_from_asin(
+                product = create_or_get_product_from_external_id(
                     db=db,
-                    asin=product_id,
+                    external_id=product_id,
+                    source_type="amazon",
                     product_data=details.get("product") or {},
                 )
         except Exception:
