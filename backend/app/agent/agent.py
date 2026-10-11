@@ -179,6 +179,14 @@ def compact_product_details(product):
         "in_stock": product.get("in_stock"),
     })
 
+    for key in ("add_ons", "recommendations"):
+        items = product.get(key) or []
+        result[key] = [
+            compact_product(item)
+            for item in items[:3]
+            if isinstance(item, dict)
+        ]
+
     return result
 
 
@@ -461,16 +469,9 @@ def catalog(
                 "error": "product_id is required."
             }
 
-        result = get_product_info(
-            asin=product_id
-        )
-
-        if not result["found"]:
-            return {
-                "error": "Product not found"
-            }
-
-        result = result["product"]
+        result = get_product_info(asin=product_id)
+        if not result.get("found"):
+            return {"found": False, "error": result.get("error", "Product not found")}
 
         return compact_product_details(result)
 
@@ -478,83 +479,6 @@ def catalog(
         "success": False,
         "error": "Invalid catalog action."
     }
-
-
-# ============================================================
-# TOOL 2: PRODUCT RECOMMENDATIONS
-# ============================================================
-
-PRODUCT_RECOMMENDATIONS_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "product_recommendations",
-        "description": (
-            "Recommend products related to a selected product. "
-            "Use action='addons' for complementary products. "
-            "Use action='upgrade' when the buyer wants a better, "
-            "larger, more powerful, or premium alternative. "
-            "Recommendations are optional and never imply buyer approval."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-
-                "action": {
-                    "type": "string",
-                    "enum": [
-                        "addons",
-                        "upgrade"
-                    ]
-                },
-
-                "product_id": {
-                    "type": "string"
-                },
-
-                "budget_remaining": {
-                    "type": "number",
-                    "description": (
-                        "Remaining buyer budget in INR."
-                    )
-                },
-
-                "limit": {
-                    "type": "integer",
-                    "default": 3
-                }
-            },
-
-            "required": [
-                "action",
-                "product_id"
-            ]
-        }
-    }
-}
-
-
-def product_recommendations(
-    action,
-    product_id,
-    budget_remaining=None,
-    limit=3,
-):
-    """
-    Unified recommendation operation.
-    """
-
-    if action not in ("addons", "upgrade"):
-        return {
-            "success": False,
-            "error": "action must be 'addons' or 'upgrade'."
-        }
-
-    return recommend_products(
-        action=action,
-        product_id=product_id,
-        budget_remaining=budget_remaining,
-        limit=limit,
-    )
 
 
 # ============================================================
@@ -943,7 +867,6 @@ def orders(
 
 tools = [
     CATALOG_TOOL,
-    PRODUCT_RECOMMENDATIONS_TOOL,
     CART_TOOL,
     CHECKOUT_TOOL,
     ORDERS_TOOL,
@@ -956,7 +879,6 @@ tools = [
 
 TOOL_FUNCTIONS = {
     "catalog": catalog,
-    "product_recommendations": product_recommendations,
     "cart": cart,
     "checkout": checkout,
     "orders": orders,
