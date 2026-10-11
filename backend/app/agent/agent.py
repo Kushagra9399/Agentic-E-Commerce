@@ -11,7 +11,6 @@ from app.agent.prompts import SYSTEM_PROMPT
 from app.agent.tools import (
     search_products,
     get_product_info,
-    recommend_products,
     create_cart,
     add_to_cart,
     view_cart,
