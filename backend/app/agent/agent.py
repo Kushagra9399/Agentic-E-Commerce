@@ -11,6 +11,7 @@ from app.agent.prompts import SYSTEM_PROMPT
 from app.agent.tools import (
     search_products,
     get_product_info,
+    recommend_products,
     create_cart,
     add_to_cart,
     view_cart,
@@ -125,11 +126,20 @@ def compact_product(product):
     
     return {
         "id": str(product_id),
+        "asin": product.get("asin") or str(product_id),
         "name": title,
+        "title": title,
         "brand": product.get("brand", "Unknown"),
         "price": price,
-        "discount": discount,
+        "original_price": product.get("original_price"),
+        "discount": discount if discount is not None else product.get("discount"),
+        "discount_percent": discount if discount is not None else product.get("discount_percent"),
         "rating": rating,
+        "reviews": product.get("reviews") or product.get("review_count"),
+        "image": product.get("image") or product.get("thumbnail"),
+        "link": product.get("link"),
+        "source": product.get("source", "serpapi_amazon"),
+        "reason": product.get("reason"),
     }
 
 
@@ -157,8 +167,11 @@ def compact_product_details(product):
 
     result.update({
         "specifications": spec,
+        "description": product.get("description"),
         "stock": product.get("stock"),
         "link": product.get("link"),
+        "image": product.get("image") or product.get("thumbnail"),
+        "images": product.get("images"),
         "in_stock": product.get("in_stock"),
     })
 
@@ -521,10 +534,18 @@ def product_recommendations(
     Unified recommendation operation.
     """
 
-    return {
-        "success": False,
-        "error": "Product recommendations are built-in to product details."
-    }
+    if action not in ("addons", "upgrade"):
+        return {
+            "success": False,
+            "error": "action must be 'addons' or 'upgrade'."
+        }
+
+    return recommend_products(
+        action=action,
+        product_id=product_id,
+        budget_remaining=budget_remaining,
+        limit=limit,
+    )
 
 
 # ============================================================
