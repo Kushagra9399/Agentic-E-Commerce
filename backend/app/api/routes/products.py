@@ -93,6 +93,30 @@ def get_product(
     )
 
     if not product:
+        product = (
+            db.query(Product)
+            .filter(Product.asin == product_id)
+            .first()
+        )
+
+    if not product:
+        # Search/recommendation cards use ASINs. Fetch and cache details so
+        # the same product can be opened in the existing detail UI.
+        try:
+            from app.services.serpapi_service import SerpAPIService
+            from app.services.product_cache_service import create_or_get_product_from_asin
+
+            details = SerpAPIService().get_product_details(asin=product_id)
+            if details.get("found"):
+                product = create_or_get_product_from_asin(
+                    db=db,
+                    asin=product_id,
+                    product_data=details.get("product") or {},
+                )
+        except Exception:
+            product = None
+
+    if not product:
         raise HTTPException(
             status_code=404,
             detail="Product not found"
