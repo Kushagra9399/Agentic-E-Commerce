@@ -356,122 +356,60 @@ def limit_tool_result(result):
 
 
 # ============================================================
-# TOOL 1: CATALOG
+# PRODUCT TOOLS
 # ============================================================
 
-CATALOG_TOOL = {
+SEARCH_PRODUCTS_TOOL = {
     "type": "function",
     "function": {
-        "name": "catalog",
-        "description": (
-            "Product discovery tool. "
-            "Use action='search' when the buyer wants to find "
-            "or compare products. "
-            "Use action='details' when the buyer refers to a "
-            "specific product and wants more information."
-        ),
+        "name": "search_products",
+        "description": "Search Amazon products by query and optional filters.",
         "parameters": {
             "type": "object",
             "properties": {
-
-                "action": {
-                    "type": "string",
-                    "enum": [
-                        "search",
-                        "details"
-                    ]
-                },
-
-                "query": {
-                    "type": "string",
-                    "description": (
-                        "Semantic description of the product "
-                        "the buyer wants."
-                    )
-                },
-
-                "product_id": {
-                    "type": "string",
-                    "description": (
-                        "Product ID for action='details'."
-                    )
-                },
-
-                "max_price": {
-                    "type": "number",
-                    "description": (
-                        "Maximum acceptable price in INR."
-                    )
-                },
-
-                "min_price": {
-                    "type": "number",
-                    "description": (
-                        "Minimum acceptable price in INR."
-                    )
-                },
-
-                "brand": {
-                    "type": "string"
-                },
-
-                "limit": {
-                    "type": "integer",
-                    "description": "Max results (default 5)."
-                }
+                "query": {"type": "string"},
+                "max_price": {"type": "number"},
+                "min_price": {"type": "number"},
+                "brand": {"type": "string"},
+                "limit": {"type": "integer", "default": 5}
             },
+            "required": ["query"]
+        }
+    }
+}
 
-            "required": [
-                "action"
-            ]
+GET_PRODUCT_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "get_product",
+        "description": "Fetch one product's SerpAPI details plus cached add-ons and recommendations.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "product_id": {"type": "string"}
+            },
+            "required": ["product_id"]
         }
     }
 }
 
 
-def catalog(
-    action,
-    query=None,
-    product_id=None,
-    max_price=None,
-    min_price=None,
-    brand=None,
-    limit=5,
-):
-    """
-    Unified catalog operation.
-    """
+def search_products_tool(query, max_price=None, min_price=None, brand=None, limit=5):
+    result = search_products(
+        query=query,
+        max_price=max_price,
+        min_price=min_price,
+        brand=brand,
+        limit=max(1, min(int(limit), 10)),
+    )
+    return compact_product_list(result)
 
-    if action == "search":
 
-        result = search_products(
-            query=query,
-            max_price=max_price,
-            min_price=min_price,
-            brand=brand,
-            limit=limit,
-        )
-
-        return compact_product_list(result)
-
-    if action == "details":
-
-        if not product_id:
-            return {
-                "success": False,
-                "error": "product_id is required."
-            }
-
-        result = get_product_info(asin=product_id)
-        if not result.get("found"):
-            return {"found": False, "error": result.get("error", "Product not found")}
-
-        return compact_product_details(result)
-
-    return {
-        "success": False,
-        "error": "Invalid catalog action."
-    }
+def get_product_tool(product_id):
+    result = get_product_info(asin=product_id)
+    if not result.get("found"):
+        return {"found": False, "error": result.get("error", "Product not found")}
+    return compact_product_details(result)
 
 
 # ============================================================
@@ -859,7 +797,8 @@ def orders(
 # ============================================================
 
 tools = [
-    CATALOG_TOOL,
+    SEARCH_PRODUCTS_TOOL,
+    GET_PRODUCT_TOOL,
     CART_TOOL,
     CHECKOUT_TOOL,
     ORDERS_TOOL,
@@ -871,7 +810,8 @@ tools = [
 # ============================================================
 
 TOOL_FUNCTIONS = {
-    "catalog": catalog,
+    "search_products": search_products_tool,
+    "get_product": get_product_tool,
     "cart": cart,
     "checkout": checkout,
     "orders": orders,
