@@ -212,9 +212,14 @@ def compact_product_list(result):
             for item in products
         ]
 
-        return {
-            "products": compacted
+        compact_result = {
+            "products": compacted,
+            "count": result.get("count", result.get("found", len(compacted))),
         }
+        for key in ("query", "error", "from_cache", "has_more", "related_searches"):
+            if key in result:
+                compact_result[key] = result[key]
+        return compact_result
 
     return result
 
