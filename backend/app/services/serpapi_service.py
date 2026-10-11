@@ -491,12 +491,18 @@ class SerpAPIService:
         
         # Fallback to extracted_price from product_results
         if price == 0:
-            price = self._parse_price(product.get("extracted_price", "0"))
+            raw_price = product.get("extracted_price")
+            if raw_price is None:
+                raw_price = product.get("price")
+            price = self._parse_price(raw_price)
         
         # Get original price
-        original_price = self._parse_price(
-            product.get("extracted_old_price", "0")
+        raw_original_price = (
+            product.get("extracted_old_price")
+            or product.get("old_price")
+            or product.get("price_strikethrough")
         )
+        original_price = self._parse_price(raw_original_price)
         
         # Calculate discount
         discount_percent = 0
@@ -539,7 +545,7 @@ class SerpAPIService:
         return {
             "asin": product.get("asin", ""),
             "title": product.get("title", ""),
-            "brand": product.get("brand", "Unknown"),
+            "brand": product.get("brand") or product.get("specs", {}).get("brand", "Unknown"),
             "price": price,
             "original_price": original_price,
             "discount_percent": discount_percent,
@@ -623,6 +629,14 @@ class SerpAPIService:
             or data.get("customers_also_viewed")
             or []
         )
+        if not related_products:
+            sections = data.get("related_product_sections") or []
+            related_products = [
+                item
+                for section in sections
+                if isinstance(section, dict)
+                for item in (section.get("items") or [])
+            ]
         if isinstance(related_products, dict):
             related_products = related_products.get("products") or related_products.get("items") or []
 
