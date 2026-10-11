@@ -925,7 +925,18 @@ def trim_prompt_to_token_limit(messages, max_tokens=MAX_PROMPT_TOKENS):
     while conversation and estimate_prompt_tokens(
         ([system_message] if system_message else []) + conversation
     ) > max_tokens:
-        conversation.pop(0)
+        # Remove a complete oldest turn, including any tool-call/result messages,
+        # rather than leaving orphaned tool messages in the API conversation.
+        next_user_index = next(
+            (index for index, message in enumerate(conversation)
+             if index > 0 and message.get("role") == "user"),
+            None,
+        )
+        if next_user_index is not None:
+            del conversation[:next_user_index]
+        else:
+            # Keep the current user request; if it alone is too large, fail clearly.
+            break
 
     trimmed = ([system_message] if system_message else []) + conversation
     estimated_tokens = estimate_prompt_tokens(trimmed)
