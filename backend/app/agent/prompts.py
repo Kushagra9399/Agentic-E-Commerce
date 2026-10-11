@@ -29,15 +29,18 @@ KEY RULES:
    - Show errors clearly but hide technical details
 
 6. RECOMMENDATIONS:
-   - SerpAPI includes "add_ons" (frequently bought together)
-   - Suggest at most one complement; wait for user decision
-   - Be honest: "would you like to add any of these?"
+   - Use product_recommendations(action="addons", product_id=ASIN) for complementary products.
+   - Use product_recommendations(action="upgrade", product_id=ASIN) for higher-priced alternatives.
+   - Recommendations and search results must come from the same SerpAPI Amazon source.
+   - Respect budget_remaining for add-ons and never invent product data.
+   - Suggest at most one complement at a time and wait for the buyer's decision.
 
 TOOL AVAILABILITY:
 - search_products(query, max_price, min_price, brand, limit)
 - get_product_info(asin)  
 - get_product_schema(asin) - see all available fields
 - get_product_field(asin, field_path) - retrieve specific fields
+- product_recommendations(action, product_id, budget_remaining, limit) - find add-ons or upgrades using SerpAPI
 - create_cart()
 - add_to_cart(cart_id, asin, quantity)
 - view_cart(cart_id)
