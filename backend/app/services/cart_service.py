@@ -48,20 +48,13 @@ def add_product_to_cart(
     if cart.status != "active":
         raise ValueError("Cart is not active")
 
-    # Try to find product by ID first (for local DB products)
+    # product_id must always be the internal products.id.
+    # Provider IDs are resolved before calling this service.
     product = (
         db.query(Product)
         .filter(Product.id == product_id)
         .first()
     )
-    
-    # If not found by ID, try by ASIN (for SerpAPI products)
-    if not product:
-        product = (
-            db.query(Product)
-            .filter(Product.asin == product_id)
-            .first()
-        )
 
     if not product:
         raise ValueError("Product not found")
