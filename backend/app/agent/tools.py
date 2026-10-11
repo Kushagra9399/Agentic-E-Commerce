@@ -228,7 +228,8 @@ def add_to_cart(
     except ValueError as e:
         return {"success": False, "error": str(e)}
     except Exception as e:
-        return {"success": False, "error": f"Error: {str(e)}"}
+        print(f"Cart add failed: {e!r}")
+        return {"success": False, "error": "Unable to add this product to the cart. Please retry."}
 
 
 def view_cart(cart_id: str) -> dict:
@@ -246,6 +247,9 @@ def view_cart(cart_id: str) -> dict:
             return get_cart_details(db=db, cart_id=cart_id)
     except ValueError as e:
         return {"found": False, "error": str(e)}
+    except Exception as e:
+        print(f"Cart view failed: {e!r}")
+        return {"found": False, "error": "Unable to load the cart. Please retry."}
 
 
 def review_cart_and_budget(
@@ -324,6 +328,9 @@ def review_cart_and_budget(
     
     except ValueError as e:
         return {"success": False, "error": str(e)}
+    except Exception as e:
+        print(f"Cart review failed: {e!r}")
+        return {"success": False, "error": "Unable to review the cart. Please retry."}
 
 
 def approve_cart_tool(cart_id: str) -> dict:
