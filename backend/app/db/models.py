@@ -91,6 +91,11 @@ class Product(Base):
         nullable=True
     )
 
+    specification = Column(
+        Text,
+        nullable=False
+    )
+
     search_text = Column(
         Text,
         nullable=False
