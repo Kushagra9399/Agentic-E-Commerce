@@ -120,6 +120,34 @@ class SerpAPICache:
             print(f"[SerpAPICache] Could not persist cache file: {exc}")
     
     @staticmethod
+    def find_cached_products(exclude_asin: str = "", limit: int = 30) -> list[Dict[str, Any]]:
+        """Collect products from unexpired search JSON files without API calls."""
+        products = {}
+        folder = SerpAPICache._cache_dir / "searches"
+        if not folder.exists():
+            return []
+
+        cutoff = datetime.now() - timedelta(hours=SerpAPICache._ttl_hours)
+        for path in folder.glob("*.json"):
+            try:
+                entry = json.loads(path.read_text(encoding="utf-8"))
+                timestamp = datetime.fromisoformat(entry.get("timestamp", ""))
+                if timestamp < cutoff:
+                    continue
+                data = entry.get("data") or {}
+                for product in data.get("products", []):
+                    if not isinstance(product, dict):
+                        continue
+                    asin = product.get("asin") or product.get("product_id") or ""
+                    if not asin or asin == exclude_asin:
+                        continue
+                    products[asin] = product
+            except (OSError, ValueError, TypeError, json.JSONDecodeError):
+                continue
+
+        return list(products.values())[:max(1, limit)]
+
+    @staticmethod
     def clear() -> None:
         """Clear all cache entries."""
         SerpAPICache._cache.clear()
