@@ -130,7 +130,6 @@ def get_product_info(asin: str) -> dict:
         "images": product.get("images"),
         "merchant": product.get("merchant"),
         "availability": product.get("availability"),
-        "link": product.get("link"),
         
         # Built-in Amazon recommendations
         "add_ons": result.get("add_ons", []),  # Frequently bought together
