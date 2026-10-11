@@ -286,34 +286,43 @@ class SerpAPIService:
             
             product = self._format_product_details(data)
             
-            # Prefer recommendations embedded in the product response. If Amazon
-            # does not return them, retrieve candidates through the same SerpAPI
-            # Amazon search service so all displayed product data has one source.
+            # Product details are the only per-product API call. Recommendations
+            # reuse related items embedded in that response or persisted search JSON.
             add_ons = self._extract_addons(data)
             recommendations = self._extract_recommendations(data)
             current = product.get("asin") or asin
+            cached_products = SerpAPICache.find_cached_products(
+                exclude_asin=current,
+                limit=100,
+            )
 
-            if not add_ons and product.get("title"):
-                addon_result = self.search_products(
-                    query=f"{product['title']} compatible accessories",
-                    limit=5,
-                    amazon_domain=amazon_domain,
+            if not add_ons:
+                accessory_terms = (
+                    "case", "cover", "charger", "cable", "adapter", "stand",
+                    "mount", "screen protector", "keyboard", "mouse", "bag",
+                    "headphone", "earphone", "remote", "battery", "protector",
+                    "accessory", "accessories", "sleeve", "dock",
                 )
                 add_ons = [
-                    item for item in addon_result.get("products", [])
-                    if item.get("asin") != current
+                    item for item in cached_products
+                    if any(term in (item.get("title") or "").casefold()
+                           for term in accessory_terms)
                 ][:3]
 
-            if not recommendations and product.get("title"):
-                rec_result = self.search_products(
-                    query=f"{product['title']} similar alternatives",
-                    limit=5,
-                    amazon_domain=amazon_domain,
-                )
-                recommendations = [
-                    item for item in rec_result.get("products", [])
-                    if item.get("asin") != current
-                ][:3]
+            if not recommendations:
+                current_price = product.get("price") or 0
+                recommendations = []
+                for item in cached_products:
+                    item_price = item.get("price") or 0
+                    try:
+                        item_price = float(item_price)
+                        current_price = float(current_price)
+                    except (TypeError, ValueError):
+                        continue
+                    if current_price > 0 and current_price < item_price <= current_price * 1.5:
+                        recommendations.append(item)
+                    if len(recommendations) >= 3:
+                        break
 
             result = {
                 "found": True,
