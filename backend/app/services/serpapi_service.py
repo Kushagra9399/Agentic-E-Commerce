@@ -139,17 +139,18 @@ class SerpAPIService:
 
                 # Apply price filtering in the marketplace's currency.
                 price = product.get("extracted_price")
-
+                if price is None:
+                    price = product.get("price")
                 if price is None:
                     # Do not assume a missing price passes the budget filter.
                     if min_price is not None or max_price is not None:
                         continue
                 else:
-                    try:
-                        price = int(price)
-                    except (ValueError, TypeError):
-                        print("Error while conversion")
-                        continue
+                    price = self._parse_price(price)
+                    if price <= 0:
+                        if min_price is not None or max_price is not None:
+                            continue
+                        price = None
 
                     if min_price is not None and price < min_price:
                         continue
