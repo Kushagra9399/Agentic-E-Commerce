@@ -1,10 +1,10 @@
 """
 Request cache service for SerpAPI calls.
 
-Stores all SerpAPI requests/responses in database to:
+Stores SerpAPI search and product responses in named JSON files with an in-memory index.
 - Avoid duplicate API calls
-- Reduce API quota usage
-- Improve performance on repeated searches
+- Reuse searched products for later recommendations
+- Expire cache entries after 24 hours
 """
 
 import json
@@ -17,8 +17,7 @@ from typing import Dict, Any, Optional
 
 class SerpAPICache:
     """
-    Cache storage for SerpAPI requests.
-    Uses a simple in-memory dict; can be migrated to DB table if needed.
+    Persistent JSON cache with an in-memory index.
     """
     
     # Fast in-memory cache plus persistent JSON files, with a 24-hour TTL.
