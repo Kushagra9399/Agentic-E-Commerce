@@ -36,19 +36,26 @@ def search_products(request: SearchRequest):
     for p in result.get("products", []):
         products.append({
             "asin": p.get("asin"),
+            "id": p.get("asin"),
             "title": p.get("title"),
+            "name": p.get("title"),
             "brand": p.get("brand"),
-            "price": f"₹{p.get('price')}",
-            "original_price": f"₹{p.get('original_price')}" if p.get("original_price") else None,
-            "discount": f"{p.get('discount_percent')}%",
+            "price": p.get("price"),
+            "original_price": p.get("original_price"),
+            "discount_percent": p.get("discount_percent", 0),
             "rating": p.get("rating"),
             "reviews": p.get("review_count"),
-            "in_stock": p.get("in_stock")
+            "image": p.get("image"),
+            "thumbnail": p.get("image"),
+            "link": p.get("link"),
+            "source": p.get("source", "serpapi_amazon"),
+            "in_stock": p.get("in_stock", True)
         })
 
     return {
         "query": request.query,
         "count": len(products),
         "products": products,
-        "from_cache": result.get("from_cache", False)
+        "from_cache": result.get("from_cache", False),
+        "error": result.get("error")
     }
