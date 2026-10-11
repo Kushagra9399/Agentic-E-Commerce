@@ -41,14 +41,18 @@ def get_upsell(asin: str):
             "asin": asin,
             "title": product.get("title"),
             "price": product.get("price"),
-            "brand": product.get("brand")
+            "brand": product.get("brand"),
+            "image": product.get("image"),
+            "link": product.get("link")
         },
 
         "upgrade": {
             "asin": upgrade.get("asin"),
             "title": upgrade.get("title"),
-            "price": upgrade.get("price"),
+            "price": upgrade.get("price") or upgrade.get("extracted_price"),
             "brand": upgrade.get("brand"),
+            "image": upgrade.get("image") or upgrade.get("thumbnail"),
+            "link": upgrade.get("link") or upgrade.get("link_clean"),
             "reason": "Premium alternative with better features"
         }
     }
