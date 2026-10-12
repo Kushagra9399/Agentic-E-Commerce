@@ -1169,6 +1169,7 @@ def build_payment_response(result):
 def chat(
     session_id: str,
     user_message: str,
+    cart_id: str | None = None,
 ):
     """
     Main conversational agent.
@@ -1323,8 +1324,14 @@ def chat(
                 )
 
                 # ------------------------------------------------
-                # EXECUTE (with session context for checkout)
+                # EXECUTE (with session context for checkout/cart)
                 # ------------------------------------------------
+
+                # Keep assistant-driven cart operations on the same cart the
+                # frontend displays. The LLM may omit cart_id or reuse an old one.
+                if tool_name == "cart" and cart_id:
+                    if arguments.get("action") in {"add", "view"}:
+                        arguments["cart_id"] = cart_id
 
                 if tool_name == "checkout":
                     arguments["session_id"] = session_id
