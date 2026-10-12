@@ -33,7 +33,7 @@ from app.agent.session import get_session
 MAX_TOOL_ROUNDS = 5
 MAX_HISTORY_MESSAGES = 14
 MAX_TOOL_RESULT_CHARS = 8000
-MAX_PROMPT_TOKENS = 7000
+MAX_PROMPT_TOKENS = 4000
 MAX_GROQ_RETRIES = 5
 BACKOFF_BASE_SECONDS = 1
 BACKOFF_MAX_SECONDS = 30
@@ -947,7 +947,9 @@ def trim_prompt_to_token_limit(messages, max_tokens=MAX_PROMPT_TOKENS):
 
     if estimated_tokens > max_tokens:
         raise ValueError(
-            "The system prompt and tool schemas exceed the 7000-token prompt budget."
+            f"The system prompt, conversation, and tool schemas exceed the "
+            f"{max_tokens}-token prompt budget. Shorten the system prompt or tool "
+            "schemas, or reduce the current user message."
         )
 
     messages[:] = trimmed
@@ -955,16 +957,14 @@ def trim_prompt_to_token_limit(messages, max_tokens=MAX_PROMPT_TOKENS):
 
 
 def is_rate_limit_error(error):
-    status_code = getattr(error, "status_code", None)
-    error_text = str(error).lower()
-    return (
-        status_code == 429
-        or "rate limit" in error_text
-        or "rate_limit_exceeded" in error_text
-        or "too many requests" in error_text
-        or "tokens per minute" in error_text
-        or "requests per minute" in error_text
-    )
+    """
+    Retry only actual HTTP rate-limit responses.
+
+    Groq may return HTTP 413 with an error code such as
+    'rate_limit_exceeded' when the request exceeds the TPM budget.
+    Retrying the same oversized request cannot fix that condition.
+    """
+    return getattr(error, "status_code", None) == 429
 
 
 def retry_after_seconds(error):
@@ -994,7 +994,7 @@ def call_llm(messages):
                 messages=messages,
                 tools=tools,
                 tool_choice="auto",
-                max_tokens=800,
+                max_tokens=400,
             )
         except Exception as error:
             if not is_rate_limit_error(error) or attempt >= MAX_GROQ_RETRIES:
