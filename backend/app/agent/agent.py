@@ -40,7 +40,7 @@ BACKOFF_MAX_SECONDS = 30
 
 MODEL = "openai/gpt-oss-20b"
 # Use a separate tool-calling model if GPT-OSS emits an invalid tool name.
-FALLBACK_TOOL_MODEL = "llama-3.3-70b-versatile"
+FALLBACK_TOOL_MODEL = "openai/gpt-oss-120b"
 
 
 # ============================================================
