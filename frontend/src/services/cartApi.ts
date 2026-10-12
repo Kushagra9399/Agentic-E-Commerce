@@ -116,7 +116,33 @@ export async function getCart(cartId: string): Promise<Cart> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/cart/${cartId}`);
     if (response.ok) {
-      return await response.json();
+      const data = await response.json();
+      // Backend returns total/items.name; the UI expects total_amount and
+      // item.product.name. Normalize the API contract in one place.
+      const items: CartItem[] = (data.items || []).map((item: any) => ({
+        ...item,
+        cart_id: item.cart_id || data.cart_id || cartId,
+        unit_price: Number(item.unit_price ?? item.price ?? 0),
+        quantity: Number(item.quantity ?? 1),
+        product: item.product || {
+          id: item.product_id,
+          name: item.name || item.product_name || `Product ${item.product_id}`,
+          brand: item.brand,
+          sale_price: Number(item.unit_price ?? item.price ?? 0),
+          market_price: Number(item.market_price ?? item.unit_price ?? item.price ?? 0),
+          image: item.image,
+        },
+      }));
+      const normalized: Cart = {
+        ...data,
+        cart_id: data.cart_id || cartId,
+        status: data.status || 'active',
+        items,
+        total_amount: Number(data.total_amount ?? data.total ?? data.subtotal ?? 0),
+        currency: data.currency || 'INR',
+      };
+      memoryCartStore[cartId] = normalized;
+      return normalized;
     }
   } catch (err) {
     console.warn(`getCart failed on ${API_BASE_URL}`, err);
