@@ -284,7 +284,9 @@ export const CommerceProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     addAuditLog('Product Searched', 'Natural language inquiry', 'Buyer', `Query: "${text}"`);
 
     try {
-      const response = await api.sendChat(text, sessionId);
+      const activeCartId = await getOrCreateCartId();
+      const response = await api.sendChat(text, sessionId, activeCartId);
+      await refreshCart(activeCartId);
 
       if (response.session_id && response.session_id !== sessionId) {
         setSessionId(response.session_id);
