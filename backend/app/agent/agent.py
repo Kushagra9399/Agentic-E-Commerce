@@ -39,6 +39,8 @@ BACKOFF_BASE_SECONDS = 1
 BACKOFF_MAX_SECONDS = 30
 
 MODEL = "openai/gpt-oss-20b"
+# Use a separate tool-calling model if GPT-OSS emits an invalid tool name.
+FALLBACK_TOOL_MODEL = "llama-3.3-70b-versatile"
 
 
 # ============================================================
@@ -967,6 +969,23 @@ def is_rate_limit_error(error):
     return getattr(error, "status_code", None) == 429
 
 
+def is_tool_call_validation_error(error):
+    """
+    Detect Groq rejecting a malformed model-generated tool name, such as
+    'cart<|channel|>commentary'. The rejected call never reaches our dispatcher,
+    so retrying the same model cannot normalize it after the fact.
+    """
+    message = str(error).lower()
+    return (
+        getattr(error, "status_code", None) == 400
+        and (
+            "tool call validation failed" in message
+            or "tool_use_failed" in message
+            or "which was not in request.tools" in message
+        )
+    )
+
+
 def retry_after_seconds(error):
     response = getattr(error, "response", None)
     headers = getattr(response, "headers", None)
@@ -997,6 +1016,32 @@ def call_llm(messages):
                 max_tokens=400,
             )
         except Exception as error:
+            if is_tool_call_validation_error(error):
+                # Some model generations can incorrectly append channel tokens
+                # to a function name. Groq rejects that response before it reaches
+                # our code, so retry the same conversation with a tool-use fallback.
+                print(
+                    f"Groq rejected a malformed tool call from {MODEL}; "
+                    f"retrying once with {FALLBACK_TOOL_MODEL}.",
+                    file=sys.stderr,
+                )
+                try:
+                    trim_prompt_to_token_limit(messages)
+                    return client.chat.completions.create(
+                        model=FALLBACK_TOOL_MODEL,
+                        messages=messages,
+                        tools=tools,
+                        tool_choice="auto",
+                        max_tokens=400,
+                    )
+                except Exception as fallback_error:
+                    print(
+                        f"Fallback model {FALLBACK_TOOL_MODEL} failed: "
+                        f"{fallback_error}",
+                        file=sys.stderr,
+                    )
+                    raise
+
             if not is_rate_limit_error(error) or attempt >= MAX_GROQ_RETRIES:
                 if is_rate_limit_error(error):
                     print(
