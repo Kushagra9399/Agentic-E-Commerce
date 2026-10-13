@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="920" viewBox="0 0 1440 920" role="img" aria-labelledby="title desc">
+<title id="title">Agentic Commerce — SerpAPI Integration Architecture</title>
+<desc id="desc">Architecture showing React frontend, FastAPI chat endpoint, Groq tool-calling agent, SerpAPI Amazon search and product details engines, 24-hour cache, and backend cart and checkout services backed by PostgreSQL.</desc>
+<defs>
+  <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#64748b"/></marker>
+  <marker id="orangeArrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#d97706"/></marker>
+  <style>
+    .title{font:700 32px Inter,Arial,sans-serif;fill:#0f172a}.subtitle{font:16px Inter,Arial,sans-serif;fill:#475569}
+    .head{font:700 18px Inter,Arial,sans-serif;fill:#0f172a}.body{font:14px Inter,Arial,sans-serif;fill:#334155}
+    .small{font:12px Inter,Arial,sans-serif;fill:#475569}.box{fill:#f8fafc;stroke:#94a3b8;stroke-width:1.7}
+    .blue{fill:#eff6ff;stroke:#3b82f6;stroke-width:2}.purple{fill:#f5f3ff;stroke:#8b5cf6;stroke-width:2}
+    .orange{fill:#fff7ed;stroke:#d97706;stroke-width:2}.green{fill:#f0fdf4;stroke:#16a34a;stroke-width:2}
+    .line{fill:none;stroke:#64748b;stroke-width:2.2;marker-end:url(#arrow)}.ext{fill:none;stroke:#d97706;stroke-width:2.7;marker-end:url(#orangeArrow)}
+    .label{font:600 12px Inter,Arial,sans-serif;fill:#475569}
+  </style>
+</defs>
+<rect width="1440" height="920" fill="#ffffff"/>
+<text x="60" y="62" class="title">Agentic Commerce</text>
+<text x="60" y="92" class="subtitle">Request flow &amp; SerpAPI integration — the external product-data path is highlighted in orange</text>
+
+<!-- Main request path -->
+<rect x="60" y="145" width="245" height="118" rx="16" class="blue"/>
+<text x="182" y="180" text-anchor="middle" class="head">React Frontend</text>
+<text x="182" y="207" text-anchor="middle" class="body">Chat UI + product cards</text>
+<text x="182" y="229" text-anchor="middle" class="body">Cart state</text>
+
+<rect x="385" y="145" width="245" height="118" rx="16" class="box"/>
+<text x="507" y="180" text-anchor="middle" class="head">FastAPI Backend</text>
+<text x="507" y="207" text-anchor="middle" class="body">POST /api/chat</text>
+<text x="507" y="229" text-anchor="middle" class="body">message + session_id + cart_id</text>
+
+<rect x="710" y="145" width="280" height="118" rx="16" class="purple"/>
+<text x="850" y="180" text-anchor="middle" class="head">Agent Orchestrator</text>
+<text x="850" y="207" text-anchor="middle" class="body">Python tool dispatch</text>
+<text x="850" y="229" text-anchor="middle" class="body">Search · Details · Cart · Checkout</text>
+
+<rect x="1070" y="145" width="300" height="118" rx="16" class="purple"/>
+<text x="1220" y="180" text-anchor="middle" class="head">Groq LLM</text>
+<text x="1220" y="207" text-anchor="middle" class="body">openai/gpt-oss-20b</text>
+<text x="1220" y="229" text-anchor="middle" class="body">Chooses tools; writes final response</text>
+
+<path d="M305 204 H385" class="line"/>
+<text x="345" y="190" text-anchor="middle" class="label">HTTP</text>
+<path d="M630 204 H710" class="line"/>
+<path d="M990 185 H1070" class="line"/>
+<path d="M1070 228 H990" class="line"/>
+<text x="1030" y="166" text-anchor="middle" class="label">tool schemas / results</text>
+
+<!-- Tool layer -->
+<path d="M850 263 V325 H245 V380" class="line"/>
+<path d="M850 325 H720 V380" class="line"/>
+<path d="M850 325 H1190 V380" class="line"/>
+
+<rect x="60" y="380" width="370" height="118" rx="15" class="orange"/>
+<text x="245" y="415" text-anchor="middle" class="head">Product Search Tool</text>
+<text x="245" y="442" text-anchor="middle" class="body">search_products(query, filters, limit)</text>
+<text x="245" y="466" text-anchor="middle" class="small">Normalizes title, ASIN, price, rating, image, link</text>
+
+<rect x="535" y="380" width="370" height="118" rx="15" class="orange"/>
+<text x="720" y="415" text-anchor="middle" class="head">Product Details Tool</text>
+<text x="720" y="442" text-anchor="middle" class="body">get_product(product ASIN)</text>
+<text x="720" y="466" text-anchor="middle" class="small">Description, specs, images, related-item data</text>
+
+<rect x="1005" y="380" width="370" height="118" rx="15" class="green"/>
+<text x="1190" y="415" text-anchor="middle" class="head">Commerce Tools</text>
+<text x="1190" y="442" text-anchor="middle" class="body">Cart · Checkout · Orders</text>
+<text x="1190" y="466" text-anchor="middle" class="small">Backend business logic and transaction state</text>
+
+<!-- SerpAPI calls -->
+<path d="M245 498 V558 H360 V605" class="ext"/>
+<text x="266" y="548" class="label">engine=amazon</text>
+<path d="M720 498 V558 H590 V605" class="ext"/>
+<text x="606" y="548" class="label">engine=amazon_product + ASIN</text>
+
+<rect x="210" y="605" width="410" height="130" rx="16" class="orange"/>
+<text x="415" y="641" text-anchor="middle" class="head">SerpAPI</text>
+<text x="415" y="668" text-anchor="middle" class="body">Amazon India product search &amp; details</text>
+<text x="415" y="691" text-anchor="middle" class="body">https://serpapi.com/search</text>
+<text x="415" y="714" text-anchor="middle" class="small">Returns structured product JSON to backend</text>
+
+<rect x="670" y="605" width="270" height="130" rx="16" class="box"/>
+<text x="805" y="641" text-anchor="middle" class="head">24-hour Cache</text>
+<text x="805" y="668" text-anchor="middle" class="body">Search responses</text>
+<text x="805" y="691" text-anchor="middle" class="body">Product-detail responses</text>
+<text x="805" y="714" text-anchor="middle" class="small">Cache hit can avoid repeat API calls</text>
+<path d="M620 650 H670" class="ext"/>
+<path d="M670 698 H620" class="ext"/>
+
+<path d="M1190 498 V605" class="line"/>
+<rect x="1010" y="605" width="360" height="130" rx="16" class="green"/>
+<text x="1190" y="641" text-anchor="middle" class="head">PostgreSQL / SQLAlchemy</text>
+<text x="1190" y="668" text-anchor="middle" class="body">Cart, order and commerce records</text>
+<text x="1190" y="691" text-anchor="middle" class="body">Backend-controlled state changes</text>
+<text x="1190" y="714" text-anchor="middle" class="small">Separate from SerpAPI's product-data role</text>
+
+<!-- Return path -->
+<path d="M415 735 V785 H35 V320 H850 V263" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+<text x="450" y="308" text-anchor="middle" class="label">Structured tool result returns to agent</text>
+
+<rect x="60" y="815" width="1310" height="60" rx="12" fill="#f8fafc" stroke="#cbd5e1"/>
+<text x="85" y="840" class="head" style="font-size:15px">Key distinction</text>
+<text x="85" y="861" class="body">Groq = intent + tool selection  •  SerpAPI = external product data  •  FastAPI tools = application logic  •  PostgreSQL = commerce state</text>
+</svg>
