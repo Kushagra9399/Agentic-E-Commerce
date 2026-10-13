@@ -33,12 +33,14 @@ from app.agent.session import get_session
 MAX_TOOL_ROUNDS = 5
 MAX_HISTORY_MESSAGES = 14
 MAX_TOOL_RESULT_CHARS = 8000
-MAX_PROMPT_TOKENS = 7000
+MAX_PROMPT_TOKENS = 4000
 MAX_GROQ_RETRIES = 5
 BACKOFF_BASE_SECONDS = 1
 BACKOFF_MAX_SECONDS = 30
 
 MODEL = "openai/gpt-oss-20b"
+# Use a separate tool-calling model if GPT-OSS emits an invalid tool name.
+FALLBACK_TOOL_MODEL = "openai/gpt-oss-120b"
 
 
 # ============================================================
@@ -947,7 +949,9 @@ def trim_prompt_to_token_limit(messages, max_tokens=MAX_PROMPT_TOKENS):
 
     if estimated_tokens > max_tokens:
         raise ValueError(
-            "The system prompt and tool schemas exceed the 7000-token prompt budget."
+            f"The system prompt, conversation, and tool schemas exceed the "
+            f"{max_tokens}-token prompt budget. Shorten the system prompt or tool "
+            "schemas, or reduce the current user message."
         )
 
     messages[:] = trimmed
@@ -955,15 +959,30 @@ def trim_prompt_to_token_limit(messages, max_tokens=MAX_PROMPT_TOKENS):
 
 
 def is_rate_limit_error(error):
-    status_code = getattr(error, "status_code", None)
-    error_text = str(error).lower()
+    """
+    Retry only actual HTTP rate-limit responses.
+
+    Groq may return HTTP 413 with an error code such as
+    'rate_limit_exceeded' when the request exceeds the TPM budget.
+    Retrying the same oversized request cannot fix that condition.
+    """
+    return getattr(error, "status_code", None) == 429
+
+
+def is_tool_call_validation_error(error):
+    """
+    Detect Groq rejecting a malformed model-generated tool name, such as
+    'cart<|channel|>commentary'. The rejected call never reaches our dispatcher,
+    so retrying the same model cannot normalize it after the fact.
+    """
+    message = str(error).lower()
     return (
-        status_code == 429
-        or "rate limit" in error_text
-        or "rate_limit_exceeded" in error_text
-        or "too many requests" in error_text
-        or "tokens per minute" in error_text
-        or "requests per minute" in error_text
+        getattr(error, "status_code", None) == 400
+        and (
+            "tool call validation failed" in message
+            or "tool_use_failed" in message
+            or "which was not in request.tools" in message
+        )
     )
 
 
@@ -994,9 +1013,35 @@ def call_llm(messages):
                 messages=messages,
                 tools=tools,
                 tool_choice="auto",
-                max_tokens=800,
+                max_tokens=400,
             )
         except Exception as error:
+            if is_tool_call_validation_error(error):
+                # Some model generations can incorrectly append channel tokens
+                # to a function name. Groq rejects that response before it reaches
+                # our code, so retry the same conversation with a tool-use fallback.
+                print(
+                    f"Groq rejected a malformed tool call from {MODEL}; "
+                    f"retrying once with {FALLBACK_TOOL_MODEL}.",
+                    file=sys.stderr,
+                )
+                try:
+                    trim_prompt_to_token_limit(messages)
+                    return client.chat.completions.create(
+                        model=FALLBACK_TOOL_MODEL,
+                        messages=messages,
+                        tools=tools,
+                        tool_choice="auto",
+                        max_tokens=400,
+                    )
+                except Exception as fallback_error:
+                    print(
+                        f"Fallback model {FALLBACK_TOOL_MODEL} failed: "
+                        f"{fallback_error}",
+                        file=sys.stderr,
+                    )
+                    raise
+
             if not is_rate_limit_error(error) or attempt >= MAX_GROQ_RETRIES:
                 if is_rate_limit_error(error):
                     print(
@@ -1124,6 +1169,7 @@ def build_payment_response(result):
 def chat(
     session_id: str,
     user_message: str,
+    cart_id: str | None = None,
 ):
     """
     Main conversational agent.
@@ -1278,8 +1324,14 @@ def chat(
                 )
 
                 # ------------------------------------------------
-                # EXECUTE (with session context for checkout)
+                # EXECUTE (with session context for checkout/cart)
                 # ------------------------------------------------
+
+                # Keep assistant-driven cart operations on the same cart the
+                # frontend displays. The LLM may omit cart_id or reuse an old one.
+                if tool_name == "cart" and cart_id:
+                    if arguments.get("action") in {"add", "view"}:
+                        arguments["cart_id"] = cart_id
 
                 if tool_name == "checkout":
                     arguments["session_id"] = session_id

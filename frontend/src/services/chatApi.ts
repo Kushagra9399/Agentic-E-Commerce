@@ -20,7 +20,8 @@ export interface ChatResponse {
  */
 export async function sendChat(
   message: string,
-  sessionId: string | null
+  sessionId: string | null,
+  cartId?: string | null
 ): Promise<ChatResponse> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/chat/`, {
@@ -28,6 +29,7 @@ export async function sendChat(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         session_id: sessionId || undefined,
+        cart_id: cartId || undefined,
         message,
       }),
     });

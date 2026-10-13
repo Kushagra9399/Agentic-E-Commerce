@@ -15,6 +15,7 @@ router = APIRouter(
 
 class ChatRequest(BaseModel):
     session_id: str | None = None
+    cart_id: str | None = None
     message: str
 
 
@@ -29,7 +30,8 @@ def chat_endpoint(request: ChatRequest):
     try:
         response = chat(
             session_id=session_id,
-            user_message=request.message
+            user_message=request.message,
+            cart_id=request.cart_id,
         )
 
         # Check if response is an error JSON

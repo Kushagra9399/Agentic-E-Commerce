@@ -13,6 +13,19 @@ from app.api.routes.chat import router as chat_router
 from app.api.routes.cross_sell import router as recommendation_router
 
 
+# Backward-compatible schema patch for databases created before external
+# marketplace product IDs were added to the Product model. create_all() creates
+# missing tables but does not add columns to existing tables.
+with engine.begin() as connection:
+    connection.exec_driver_sql(
+        "ALTER TABLE IF EXISTS products "
+        "ADD COLUMN IF NOT EXISTS external_id VARCHAR(100)"
+    )
+    connection.exec_driver_sql(
+        "ALTER TABLE IF EXISTS products "
+        "ADD COLUMN IF NOT EXISTS source_type VARCHAR(30) NOT NULL DEFAULT 'local'"
+    )
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
