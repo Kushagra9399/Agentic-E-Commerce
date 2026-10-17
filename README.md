@@ -1,43 +1,84 @@
 # Agentic E-Commerce
 
-A conversational shopping agent using a React + TypeScript frontend, FastAPI, Groq tool calling, and SerpAPI's Amazon India results.
+**Shop smarter through conversation.** Agentic E-Commerce combines an AI tool-calling agent with live Amazon India product discovery to help users find products, explore details, manage a cart, review budgets, and proceed through a controlled checkout workflow.
 
-## Current implementation
+## Highlights
 
-- Natural-language product discovery through the chat interface.
-- Groq agent configured for openai/gpt-oss-20b tool calling.
-- SerpAPI Amazon India search and product details by ASIN.
-- 24-hour cache for SerpAPI responses.
-- Normalized product fields such as ASIN, title, price, rating, image, and product link.
-- Related products and add-ons when provided by the product-data response.
-- Database-backed carts, budget review, explicit approval, orders, payment services, and audit events.
-
-**Important:** the current code still uses SQLAlchemy/PostgreSQL for commerce persistence. The planned JSON-file-per-search/ASIN cache and complete database removal are not implemented in this code snapshot. SerpAPI's response cache is separate from the commerce database.
+- **Conversational shopping:** describe what you need in natural language.
+- **AI tool orchestration:** Groq-powered agent chooses the appropriate product or commerce operation.
+- **Live product discovery:** search Amazon India through SerpAPI.
+- **Useful product details:** view product identifiers, pricing, ratings, images, links, and available specifications.
+- **Related product discovery:** surface add-ons and recommendations when available from product data.
+- **Efficient repeat searches:** a 24-hour cache for SerpAPI responses helps reuse recent results.
+- **Cart and budget workflow:** add items, view totals, review budget context, and request explicit approval before checkout.
+- **Commerce foundation:** backend services support cart, order, payment, and audit workflows.
+- **Modern full-stack design:** React + TypeScript frontend with a FastAPI backend.
 
 ## Architecture
 
 ```text
-React + TypeScript -> FastAPI -> Groq tool-calling agent
-                                  | product tools -> SerpAPI service -> 24-hour cache / SerpAPI
-                                  | cart/order/payment tools -> SQLAlchemy services -> PostgreSQL
+React + TypeScript
+       |
+       v
+FastAPI API
+       |
+       v
+Groq tool-calling agent
+       |                              |
+       v                              v
+Product tools                    Commerce services
+       |                              |
+       v                              v
+SerpAPI service                 SQLAlchemy / PostgreSQL
+       |
+       v
+24-hour response cache
+       |
+       v
+Amazon India product data
 ```
+
+## Technology stack
+
+| Layer | Technologies |
+|---|---|
+| Frontend | React, TypeScript, Vite |
+| Backend API | Python, FastAPI |
+| Agent / LLM | Groq tool calling, `openai/gpt-oss-20b` |
+| Product data | SerpAPI, Amazon India |
+| Response caching | 24-hour SerpAPI response cache |
+| Commerce persistence | SQLAlchemy, PostgreSQL |
+| Payments | Razorpay integration |
+| API exploration | FastAPI interactive docs |
 
 ## Project structure
 
 ```text
-backend/app/agent/      Agent orchestration, prompts, tools, session helpers
-backend/app/api/        API routes
-backend/app/core/       Configuration
-backend/app/db/         Database session and models
-backend/app/services/   SerpAPI/cache, cart, order, payment, audit, inventory
-frontend/               React + TypeScript + Vite
-docs/                   Architecture and demo notes
-TOOL_REFERENCE.md       Agent tool reference
+backend/
+  app/
+    agent/       Agent orchestration, prompts, tools, session helpers
+    api/         HTTP API routes
+    core/        Configuration
+    db/          Database session and models
+    services/    Product search/cache, cart, order, payment, audit
+frontend/        React + TypeScript + Vite application
+docs/            Architecture and demo guide
+README.md        Project overview and setup
+TOOL_REFERENCE.md Agent tool reference
 ```
 
-## Setup
+## Getting started
 
-Requirements: Python dependencies from backend/requirements.txt, Node.js/npm, PostgreSQL for cart/order operations, Groq API key, SerpAPI key, and Razorpay credentials if testing payment flows.
+### Requirements
+
+- Python and pip
+- Node.js and npm
+- PostgreSQL for commerce workflows
+- Groq API key
+- SerpAPI key
+- Razorpay credentials if testing payment functionality
+
+### 1. Clone and install backend dependencies
 
 ```bash
 git clone https://github.com/Kushagra9399/Agentic-E-Commerce.git
@@ -45,16 +86,36 @@ cd Agentic-E-Commerce
 cd backend
 python -m venv .venv
 source .venv/bin/activate
+# Windows: .venv\\Scripts\\activate
 pip install -r requirements.txt
 ```
 
-Create backend/.env with the variable names consumed by backend/app/core/config.py and the payment services. Common variables include GROQ_API_KEY, SERPAPI_KEY, DATABASE_URL, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, and RAZORPAY_WEBHOOK_SECRET. Never commit secrets. Initialize PostgreSQL and apply the database setup/migrations required by the current backend.
+### 2. Configure environment
 
-Start the API from backend:
+Create `backend/.env` and set the environment variables expected by `backend/app/core/config.py` and the payment services. Typical integrations include:
+
+```env
+GROQ_API_KEY=your_groq_api_key
+SERPAPI_KEY=your_serpapi_key
+DATABASE_URL=postgresql://user:password@localhost:5432/agentic_commerce
+RAZORPAY_KEY_ID=your_razorpay_key_id
+RAZORPAY_KEY_SECRET=your_razorpay_key_secret
+RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret
+```
+
+Initialize PostgreSQL and run the database setup or migrations used by the project. Keep credentials private and out of version control.
+
+### 3. Run the backend
+
+From the `backend` directory:
 
 ```bash
 uvicorn app.main:app --reload
 ```
+
+The API is typically available at `http://localhost:8000`, with interactive documentation at `http://localhost:8000/docs`.
+
+### 4. Run the frontend
 
 In another terminal:
 
@@ -64,22 +125,33 @@ npm install
 npm run dev
 ```
 
-Use the URL printed by Vite. FastAPI's interactive docs are typically at http://localhost:8000/docs.
+Open the local URL printed by Vite and ensure the frontend API configuration points to the running backend.
 
-## Shopping workflow
+## Typical shopping journey
 
-1. The user submits a natural-language request.
-2. The agent selects product search or product details tools.
-3. The backend calls SerpAPI and reuses cached responses where available.
-4. The user can add a selected ASIN to a database-backed cart.
-5. The cart can be reviewed against session budget metadata and requires explicit approval before checkout.
-6. Order and payment operations run through backend services. Payment results must be verified server-side.
+1. Describe a product need in the chat.
+2. The agent selects the product-search tool and returns relevant Amazon India results.
+3. Explore a selected product by ASIN for more details and related items.
+4. Add products to a cart and review the item list and total.
+5. Review budget context and confirm approval before proceeding.
+6. Use the backend order and payment workflow to continue checkout.
 
-## Current limitations
+## Future scope
 
-- The JSON directory cache described in previous planning is not implemented in the current backend code.
-- Removing PostgreSQL requires replacing cart, order, inventory, payment, and audit persistence, not just changing product caching.
-- SerpAPI output depends on provider availability and quota; prices and availability may change.
-- Use Razorpay test credentials for development.
+Potential enhancements that build naturally on the current foundation:
 
-See TOOL_REFERENCE.md and docs/ARCHITECTURE_AND_3_MIN_DEMO.md for more detail.
+- **Personalized recommendations:** rank products using preferences, previous interactions, and transparent user controls.
+- **Smarter comparison:** compare shortlisted products across price, ratings, specifications, and budget fit.
+- **Flexible cache storage:** introduce query-keyed JSON snapshots for convenient local inspection and reproducible demos.
+- **Modular persistence:** evaluate lightweight storage options for local/demo mode while retaining reliable transactional storage for checkout.
+- **Agent observability:** add structured traces for tool selection, latency, cache hits, and cost.
+- **Evaluation suite:** create repeatable tests for search relevance, tool selection, budget adherence, and checkout confirmation.
+- **Resilient integrations:** improve retry handling, provider error messages, and graceful recovery.
+- **Deployment readiness:** add containerized setup, health checks, and CI validation.
+
+## Documentation
+
+- [Agent Tool Reference](TOOL_REFERENCE.md)
+- [Architecture and 3-Minute Demo](docs/ARCHITECTURE_AND_3_MIN_DEMO.md)
+
+Product information, prices, and availability are supplied by external services and may change over time. Use test credentials when developing payment flows.
