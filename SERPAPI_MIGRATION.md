@@ -1,9 +1,20 @@
-# Superseded Documentation
+# Product Search Integration
 
-This migration guide is no longer maintained and has been replaced by the current implementation documentation:
+This project uses SerpAPI to retrieve Amazon India product search results and product details.
 
-- [README](README.md)
-- [Tool Reference](TOOL_REFERENCE.md)
+## Current integration
+
+- Product search is handled by the SerpAPI Amazon engine targeting `amazon.in`.
+- Product detail lookup uses an ASIN.
+- Search and product-detail responses use a 24-hour cache.
+- The product tools normalize provider data into fields suitable for the conversational shopping experience.
+
+For the current setup and workflow, see:
+
+- [Project README](README.md)
+- [Agent Tool Reference](TOOL_REFERENCE.md)
 - [Architecture and Demo](docs/ARCHITECTURE_AND_3_MIN_DEMO.md)
 
-The current code uses SerpAPI with a 24-hour response cache and still uses SQLAlchemy/PostgreSQL for cart and order persistence. Do not follow the old migration steps in this file.
+## Future enhancements
+
+Potential improvements include richer product comparisons, cache metrics, resilient retries, and query-keyed local snapshots for development and demo reproducibility.
