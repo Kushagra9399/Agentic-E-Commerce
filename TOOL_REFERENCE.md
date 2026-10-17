@@ -1,42 +1,78 @@
 # Agent Tool Reference
 
-This page describes the current agent tool implementation in backend/app/agent/tools.py.
+The agent uses focused tools to translate shopping requests into product discovery and commerce actions.
 
 ## Product discovery
 
-### search_products(query, max_price=None, min_price=None, brand=None, limit=5)
+### `search_products(query, max_price=None, min_price=None, brand=None, limit=5)`
 
-Searches Amazon India through SerpAPI and returns normalized product records. Common fields include asin/id, title/name, brand, price, original_price, discount_percent, rating, review_count, in_stock, image/thumbnail, link, source, from_cache, and error. Results and available filtering depend on the provider response and service implementation.
+Search Amazon India through SerpAPI and return normalized product records.
+
+Common fields include:
+
+- `asin` / `id`: product identifier
+- `title` / `name`: display name
+- `brand`
+- `price`, `original_price`, `discount_percent`
+- `rating`, `review_count`
+- `in_stock`
+- `image` / `thumbnail`
+- `link`, `source`
+- `from_cache`: whether a cached response was used
 
 Example:
 
 ```python
-search_products(query="wireless headphones", max_price=5000, brand="Sony", limit=5)
+search_products(
+    query="wireless headphones",
+    max_price=5000,
+    brand="Sony",
+    limit=5,
+)
 ```
 
-### get_product_info(asin)
+### `get_product_info(asin)`
 
-Fetches product details by ASIN. The response may include title, brand, price, rating, review count, images, description, specifications, merchant, availability, and cache status. Provider-supplied related items are returned as add_ons and recommendations when present; these fields are not guaranteed for every product.
+Retrieve details for a selected Amazon product. Available fields can include title, brand, pricing, rating, reviews, images, description, specifications, merchant, and availability. The response can also include related items as `add_ons` and `recommendations` when returned by the provider.
 
 ## Cart and checkout
 
-These operations currently use SQLAlchemy-backed services and PostgreSQL. They are not JSON-file-backed in the current implementation.
+The commerce tools work with backend services and persistent storage.
 
-- create_cart(): creates a persisted cart and returns its ID and initial summary.
-- add_to_cart(cart_id, asin, quantity=1): checks for a cached Amazon product in the database; if absent, fetches details through SerpAPI and stores/gets a product record before adding it.
-- view_cart(cart_id): returns persisted cart items and totals.
-- review_cart_and_budget(cart_id, session_id=None): summarizes the cart, checks any budget stored in session metadata, and records audit events.
-- approve_cart_tool(cart_id): records approval and must only be used after explicit user confirmation.
-- Order tools are wired to database-backed order services; payment operations use the configured backend payment services.
+- `create_cart()`: create a cart and return its identifier and initial summary.
+- `add_to_cart(cart_id, asin, quantity=1)`: add a product identified by ASIN; product details can be fetched and cached by the backend as needed.
+- `view_cart(cart_id)`: retrieve cart contents and totals.
+- `review_cart_and_budget(cart_id, session_id=None)`: summarize the cart and compare it with budget information available in session metadata.
+- `approve_cart_tool(cart_id)`: record approval after the user explicitly confirms.
+- Order and payment operations are handled by backend commerce services, with audit events supporting traceability.
 
-## Cache behavior
+## Caching
 
-SerpAPI search and product-detail responses use a 24-hour response cache. This is separate from the database used by product records, carts, orders, and audit events. The current implementation does not yet use one JSON file per search query or ASIN in a json/ directory.
+SerpAPI search and product-detail responses use a 24-hour response cache. Reusing recent responses can reduce repeated provider requests and improve responsiveness.
 
-## Request path
+## Request flow
 
 ```text
-User -> FastAPI -> Groq tool-calling agent -> product tool -> SerpAPI service -> cache/provider -> agent response -> frontend
+User message
+  -> FastAPI
+  -> Groq tool-calling agent
+  -> product or commerce tool
+  -> SerpAPI service / commerce service
+  -> structured result
+  -> agent response
+  -> frontend
 ```
 
-Cart and checkout requests instead call the commerce tools and database-backed services. Payment success must not be inferred from a frontend callback alone; use backend verification.
+## Design principles
+
+- **User-directed actions:** the agent helps users explore and manage a cart, with explicit confirmation before checkout approval.
+- **Clear tool boundaries:** product discovery and commerce operations are handled by focused backend tools.
+- **Efficient retrieval:** normalized product records and response caching support the shopping experience.
+- **Reliable payment flow:** payment outcomes are verified by backend services.
+
+## Future scope
+
+- Add product comparison and explainable recommendation tools.
+- Expand automated tests for tool selection and structured tool responses.
+- Add tracing for latency, cache performance, and per-request model/provider cost.
+- Explore query-keyed JSON snapshots for development, debugging, and reproducible demos.
