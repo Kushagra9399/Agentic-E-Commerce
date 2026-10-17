@@ -31,7 +31,7 @@ backend/app/core/       Configuration
 backend/app/db/         Database session and models
 backend/app/services/   SerpAPI/cache, cart, order, payment, audit, inventory
 frontend/               React + TypeScript + Vite
- docs/                  Architecture and demo notes
+docs/                   Architecture and demo notes
 TOOL_REFERENCE.md       Agent tool reference
 ```
 
